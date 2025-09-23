@@ -1,3 +1,4 @@
+import type { Href } from 'expo-router';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
@@ -26,10 +27,10 @@ function RootLayoutNav() {
 
     if (session && inAuthGroup) {
       // User is signed in and trying to access auth screens, redirect to main app
-      router.replace('/(tabs)');
+      router.replace('/');
     } else if (!session && !inAuthGroup) {
       // User is not signed in and trying to access main app, redirect to login
-      router.replace('/(auth)/login');
+      router.replace('/login' as Href);
     }
   }, [session, segments, loading]);
 
