@@ -3,7 +3,7 @@ import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 
-// Loading component
+// Loading screen
 function LoadingScreen() {
   return (
     <View style={styles.loadingContainer}>
@@ -13,7 +13,7 @@ function LoadingScreen() {
   );
 }
 
-// Navigation handler
+// Main navigation logic
 function RootLayoutNav() {
   const { session, loading } = useAuth();
   const segments = useSegments();
@@ -25,11 +25,11 @@ function RootLayoutNav() {
     const inAuthGroup = segments[0] === '(auth)';
 
     if (session && inAuthGroup) {
-      // signed in, trying to access auth screens → go to main app
-      router.replace('/');
+      // Signed in but trying to view auth routes → redirect to main app
+      router.replace('/(tabs)');
     } else if (!session && !inAuthGroup) {
-      // not signed in, trying to access main app → go to login
-      router.replace('/login');
+      // Not signed in but trying to view main app → redirect to login
+      router.replace('/(auth)/login');
     }
   }, [session, segments, loading]);
 
