@@ -1,7 +1,9 @@
-// Fallback for using MaterialIcons on Android and web.
+// components/ui/icon-symbol.tsx
+// This component provides a unified icon system that works across platforms
+// For the tab navigation, we're directly using Ionicons, but this is kept for other uses
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
+import { SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
@@ -18,6 +20,10 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'book.fill': 'menu-book',
+  'heart.fill': 'favorite',
+  'person.circle': 'account-circle',
+  'photo.fill': 'photo-library',
 } as IconMapping;
 
 /**
