@@ -3,15 +3,15 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { z } from 'zod';
 import { useAuth } from '../../contexts/AuthContext';
@@ -56,12 +56,13 @@ export default function RegisterScreen() {
         return;
       }
 
+      // Updated success message for no email verification
       Alert.alert(
         'Success',
-        'Account created! Please check your email to verify your account.',
+        'Account created successfully! You can now sign in.',
         [
           {
-            text: 'OK',
+            text: 'Sign In Now',
             onPress: () => router.push('/login'),
           },
         ]
