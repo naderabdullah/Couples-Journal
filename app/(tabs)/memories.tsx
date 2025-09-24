@@ -1,7 +1,8 @@
 // app/(tabs)/memories.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { differenceInDays, format } from 'date-fns';
-import * as FileSystem from 'expo-file-system';
+// Use legacy API as recommended in the warning
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
@@ -66,43 +67,40 @@ export default function MemoriesScreen() {
         milestonesQuery = milestonesQuery.eq('couple_id', profile.couple_id);
       } else {
         // FIXED: If no partner, load only user's entries with null couple_id
-        memoriesQuery = memoriesQuery.eq('created_by', user.id).is('couple_id', null);
-        milestonesQuery = milestonesQuery.eq('created_by', user.id).is('couple_id', null);
+        memoriesQuery = memoriesQuery.is('couple_id', null).eq('created_by', user.id);
+        milestonesQuery = milestonesQuery.is('couple_id', null).eq('created_by', user.id);
       }
 
-      const { data: memoriesData, error: memoriesError } = await memoriesQuery;
-      if (memoriesError) {
-        console.error('Error loading memories:', memoriesError);
-        throw memoriesError;
-      }
-      setMemories(memoriesData || []);
+      const [memoriesResult, milestonesResult] = await Promise.all([
+        memoriesQuery,
+        milestonesQuery
+      ]);
 
-      const { data: milestonesData, error: milestonesError } = await milestonesQuery;
-      if (milestonesError) {
-        console.error('Error loading milestones:', milestonesError);
-        throw milestonesError;
-      }
-      setMilestones(milestonesData || []);
+      if (memoriesResult.data) setMemories(memoriesResult.data);
+      if (milestonesResult.data) setMilestones(milestonesResult.data);
     } catch (error) {
       console.error('Error loading memories:', error);
-      Alert.alert('Error', 'Failed to load memories');
     } finally {
       setLoading(false);
     }
   };
 
-  const uploadImage = async (uri: string): Promise<string | null> => {
+  const uploadImage = async (uri: string) => {
     try {
       setUploading(true);
       
-      // Create a unique filename
+      if (!user) {
+        throw new Error('No user logged in');
+      }
+
+      // Extract file extension
       const fileExt = uri.split('.').pop() || 'jpg';
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `memories/${user?.id}/${fileName}`;
 
-      // Read the file as base64 using expo-file-system (most reliable in RN)
+      // Read the file as base64 using the legacy API as recommended
       const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: 'base64', // Use string instead of enum for compatibility
+        encoding: FileSystem.EncodingType.Base64,
       });
 
       // Convert base64 to binary for upload
@@ -143,9 +141,9 @@ export default function MemoriesScreen() {
   };
 
   const pickImage = async () => {
-    // expo-image-picker v17.0.8 - use MediaTypeOptions (works correctly)
+    // Use the ImagePicker with correct mediaTypes format
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.8,
@@ -186,47 +184,40 @@ export default function MemoriesScreen() {
         photos: photoUrl ? [photoUrl] : null, // Store photo URL in array
         ...(newMemory.type === 'milestone' 
           ? { milestone_date: new Date().toISOString() }
-          : { date: new Date().toISOString(), type: 'memory' }
+          : { date: new Date().toISOString() }
         ),
-        // Do not include 'id' field - let Supabase auto-generate it
       };
 
-      console.log('Saving memory data:', data); // Debug log
+      const { error } = await supabase
+        .from(table)
+        .insert(data);
 
-      const { data: savedData, error } = await supabase.from(table).insert(data).select();
+      if (error) throw error;
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
-
-      console.log('Memory saved successfully:', savedData); // Debug log
-      Alert.alert('Success', 'Memory saved! 💕');
-      setModalVisible(false);
+      Alert.alert('Success', `${newMemory.type === 'milestone' ? 'Milestone' : 'Memory'} saved!`);
+      
+      // Reset form
       setNewMemory({ title: '', description: '', type: 'memory' });
       setSelectedImage(null);
+      setModalVisible(false);
+      
+      // Reload memories
       loadMemories();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error saving memory:', error);
-      Alert.alert('Error', `Failed to save memory: ${error?.message || 'Unknown error'}`);
+      Alert.alert('Error', 'Failed to save memory');
     }
   };
 
-  const getAnniversaryCountdown = () => {
-    if (!profile?.couple_id) return null;
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const daysAgo = differenceInDays(new Date(), date);
     
-    // You could get this from the couples table anniversary_date
-    const anniversaryDate = new Date('2024-01-01'); // Placeholder
-    const today = new Date();
-    const nextAnniversary = new Date(anniversaryDate);
-    nextAnniversary.setFullYear(today.getFullYear());
+    if (daysAgo === 0) return 'Today';
+    if (daysAgo === 1) return 'Yesterday';
+    if (daysAgo < 7) return `${daysAgo} days ago`;
     
-    if (nextAnniversary < today) {
-      nextAnniversary.setFullYear(today.getFullYear() + 1);
-    }
-    
-    const daysUntil = differenceInDays(nextAnniversary, today);
-    return daysUntil;
+    return format(date, 'MMM d, yyyy');
   };
 
   const openMemoryDetail = (item: Memory | Milestone) => {
@@ -234,125 +225,99 @@ export default function MemoriesScreen() {
     setDetailModalVisible(true);
   };
 
-  const renderMemoryCard = ({ item }: { item: Memory | Milestone }) => {
+  const renderMemory = ({ item }: { item: Memory | Milestone }) => {
     const isMilestone = 'milestone_date' in item;
-    const hasImage = item.photos && item.photos.length > 0;
     
     return (
       <TouchableOpacity 
         style={styles.memoryCard}
         onPress={() => openMemoryDetail(item)}
-        activeOpacity={0.7}
       >
-        {hasImage ? (
-          <Image 
-            source={{ uri: item.photos![0] }} 
-            style={styles.memoryImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.memoryPlaceholder}>
-            <Ionicons 
-              name={isMilestone ? "star" : "image-outline"} 
-              size={40} 
-              color={isMilestone ? "#FFD700" : "#ccc"} 
-            />
-          </View>
+        {item.photos && item.photos[0] && (
+          <Image source={{ uri: item.photos[0] }} style={styles.memoryImage} />
         )}
-        <View style={styles.memoryInfo}>
-          {isMilestone && (
-            <View style={styles.milestoneBadge}>
-              <Ionicons name="star" size={12} color="#FFD700" />
-              <Text style={styles.milestoneLabel}>Milestone</Text>
-            </View>
-          )}
-          <Text style={styles.memoryTitle} numberOfLines={2}>{item.title}</Text>
+        <View style={styles.memoryContent}>
+          <View style={styles.memoryHeader}>
+            <Text style={styles.memoryTitle}>{item.title}</Text>
+            {isMilestone && (
+              <View style={styles.milestoneTag}>
+                <Ionicons name="trophy" size={12} color="#fff" />
+                <Text style={styles.milestoneText}>Milestone</Text>
+              </View>
+            )}
+          </View>
           {item.description && (
             <Text style={styles.memoryDescription} numberOfLines={2}>
               {item.description}
             </Text>
           )}
           <Text style={styles.memoryDate}>
-            {format(new Date(isMilestone ? item.milestone_date : item.date), 'MMM d, yyyy')}
+            {formatDate(isMilestone ? item.milestone_date : item.date)}
           </Text>
         </View>
       </TouchableOpacity>
     );
   };
 
-  const combinedData = [
-    ...memories.map(m => ({ ...m, type: 'memory' })),
-    ...milestones.map(m => ({ ...m, type: 'milestone' }))
-  ].sort((a, b) => {
-    const dateA = new Date('milestone_date' in a ? a.milestone_date : a.date);
-    const dateB = new Date('milestone_date' in b ? b.milestone_date : b.date);
-    return dateB.getTime() - dateA.getTime();
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <Ionicons name="images-outline" size={64} color="#CBD5E0" />
+      <Text style={styles.emptyTitle}>No memories yet</Text>
+      <Text style={styles.emptyText}>
+        Start capturing your special moments together
+      </Text>
+      <TouchableOpacity 
+        style={styles.emptyButton}
+        onPress={() => setModalVisible(true)}
+      >
+        <Text style={styles.emptyButtonText}>Add Your First Memory</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#EC4899" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const allItems = [...memories, ...milestones].sort((a, b) => {
+    const dateA = 'milestone_date' in a ? a.milestone_date : a.date;
+    const dateB = 'milestone_date' in b ? b.milestone_date : b.date;
+    return new Date(dateB).getTime() - new Date(dateA).getTime();
   });
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Memories</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={pickImage} style={styles.headerButton}>
-            <Ionicons name="camera" size={24} color="#EC4899" />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => setModalVisible(true)} 
-            style={styles.headerButton}
-          >
-            <Ionicons name="add-circle" size={28} color="#EC4899" />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setModalVisible(true)}
+        >
+          <Ionicons name="add-circle" size={32} color="#EC4899" />
+        </TouchableOpacity>
       </View>
 
-      {/* Anniversary Countdown - Only show if user has partner */}
-      {profile?.couple_id && (
-        <View style={styles.anniversaryCard}>
-          <Ionicons name="heart" size={24} color="#EC4899" />
-          <View style={styles.anniversaryContent}>
-            <Text style={styles.anniversaryTitle}>Anniversary</Text>
-            <Text style={styles.anniversaryCountdown}>
-              {getAnniversaryCountdown()} days to go!
-            </Text>
-          </View>
-        </View>
-      )}
+      <FlatList
+        data={allItems}
+        renderItem={renderMemory}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={renderEmptyState}
+      />
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#EC4899" style={{ marginTop: 20 }} />
-      ) : combinedData.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateEmoji}>📸</Text>
-          <Text style={styles.emptyStateTitle}>No Memories Yet</Text>
-          <Text style={styles.emptyStateText}>
-            Start capturing your special moments and milestones
-          </Text>
-          <TouchableOpacity style={styles.createFirstButton} onPress={() => setModalVisible(true)}>
-            <Text style={styles.createFirstButtonText}>Create Your First Memory</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={combinedData}
-          renderItem={renderMemoryCard}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          contentContainerStyle={styles.memoriesList}
-          columnWrapperStyle={styles.memoryRow}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
-
-      {/* New Memory Modal */}
+      {/* Add Memory Modal */}
       <Modal
+        visible={modalVisible}
         animationType="slide"
         transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => {
-          setModalVisible(false);
-          setSelectedImage(null);
-        }}
+        onRequestClose={() => setModalVisible(false)}
       >
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -361,101 +326,82 @@ export default function MemoriesScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>New Memory</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setModalVisible(false);
-                  setSelectedImage(null);
-                }}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color="#666" />
+              <TouchableOpacity onPress={() => {
+                setModalVisible(false);
+                setSelectedImage(null);
+                setNewMemory({ title: '', description: '', type: 'memory' });
+              }}>
+                <Ionicons name="close" size={24} color="#4A5568" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalForm}>
-              {/* Image Preview */}
-              {selectedImage && (
-                <View style={styles.imagePreviewContainer}>
-                  <Image source={{ uri: selectedImage }} style={styles.imagePreview} />
-                  <TouchableOpacity 
-                    style={styles.removeImageButton}
-                    onPress={() => setSelectedImage(null)}
-                  >
-                    <Ionicons name="close-circle" size={24} color="#FF3B30" />
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Add Photo Button */}
-              {!selectedImage && (
-                <TouchableOpacity style={styles.addPhotoButton} onPress={pickImage}>
-                  <Ionicons name="camera" size={24} color="#EC4899" />
-                  <Text style={styles.addPhotoText}>Add Photo</Text>
-                </TouchableOpacity>
-              )}
-              {/* Memory Type Selection */}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Memory Type Selector */}
               <View style={styles.typeSelector}>
                 <TouchableOpacity
                   style={[
                     styles.typeButton,
-                    newMemory.type === 'memory' && styles.selectedType,
+                    newMemory.type === 'memory' && styles.typeButtonActive
                   ]}
                   onPress={() => setNewMemory({ ...newMemory, type: 'memory' })}
                 >
-                  <Ionicons name="image" size={20} color={newMemory.type === 'memory' ? '#EC4899' : '#666'} />
-                  <Text style={[styles.typeText, newMemory.type === 'memory' && styles.selectedTypeText]}>
-                    Memory
-                  </Text>
+                  <Text style={[
+                    styles.typeButtonText,
+                    newMemory.type === 'memory' && styles.typeButtonTextActive
+                  ]}>Memory</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.typeButton,
-                    newMemory.type === 'milestone' && styles.selectedType,
+                    newMemory.type === 'milestone' && styles.typeButtonActive
                   ]}
                   onPress={() => setNewMemory({ ...newMemory, type: 'milestone' })}
                 >
-                  <Ionicons name="star" size={20} color={newMemory.type === 'milestone' ? '#EC4899' : '#666'} />
-                  <Text style={[styles.typeText, newMemory.type === 'milestone' && styles.selectedTypeText]}>
-                    Milestone
-                  </Text>
+                  <Text style={[
+                    styles.typeButtonText,
+                    newMemory.type === 'milestone' && styles.typeButtonTextActive
+                  ]}>Milestone</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Title Input */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Title *</Text>
-                <TextInput
-                  style={styles.titleInput}
-                  placeholder={`Give your ${newMemory.type} a title...`}
-                  value={newMemory.title}
-                  onChangeText={(text) => setNewMemory({ ...newMemory, title: text })}
-                />
-              </View>
+              {/* Image Picker */}
+              <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
+                {selectedImage ? (
+                  <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
+                ) : (
+                  <>
+                    <Ionicons name="camera" size={32} color="#A0AEC0" />
+                    <Text style={styles.imagePickerText}>Add Photo</Text>
+                  </>
+                )}
+              </TouchableOpacity>
 
-              {/* Description Input */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Description (Optional)</Text>
-                <TextInput
-                  style={styles.descriptionInput}
-                  placeholder="Add some details about this moment..."
-                  value={newMemory.description}
-                  onChangeText={(text) => setNewMemory({ ...newMemory, description: text })}
-                  multiline={true}
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-              </View>
+              <TextInput
+                style={styles.input}
+                placeholder="Title"
+                placeholderTextColor={"#A0AEC0"}
+                value={newMemory.title}
+                onChangeText={(text) => setNewMemory({ ...newMemory, title: text })}
+              />
+
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Description (optional)"
+                placeholderTextColor={"#A0AEC0"}
+                value={newMemory.description}
+                onChangeText={(text) => setNewMemory({ ...newMemory, description: text })}
+                multiline
+                numberOfLines={4}
+              />
 
               <TouchableOpacity 
-                style={[styles.saveButton, uploading && styles.saveButtonDisabled]} 
+                style={[styles.saveButton, uploading && styles.saveButtonDisabled]}
                 onPress={saveMemory}
                 disabled={uploading}
               >
-                {uploading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save {newMemory.type}</Text>
-                )}
+                <Text style={styles.saveButtonText}>
+                  {uploading ? 'Uploading...' : 'Save Memory'}
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -464,26 +410,22 @@ export default function MemoriesScreen() {
 
       {/* Memory Detail Modal */}
       <Modal
-        animationType="slide"
-        transparent={false}
         visible={detailModalVisible}
+        animationType="slide"
+        transparent={true}
         onRequestClose={() => setDetailModalVisible(false)}
       >
-        <SafeAreaView style={styles.detailContainer}>
-          <View style={styles.detailHeader}>
-            <TouchableOpacity onPress={() => setDetailModalVisible(false)}>
-              <Ionicons name="arrow-back" size={28} color="#333" />
+        <View style={styles.modalOverlay}>
+          <View style={styles.detailModalContent}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setDetailModalVisible(false)}
+            >
+              <Ionicons name="close-circle" size={32} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.detailHeaderTitle}>
-              {'milestone_date' in (selectedMemory || {}) ? 'Milestone' : 'Memory'}
-            </Text>
-            <View style={{ width: 28 }} />
-          </View>
-
-          <ScrollView style={styles.detailContent} showsVerticalScrollIndicator={false}>
+            
             {selectedMemory && (
-              <>
-                {/* Image */}
+              <ScrollView showsVerticalScrollIndicator={false}>
                 {selectedMemory.photos && selectedMemory.photos[0] && (
                   <Image 
                     source={{ uri: selectedMemory.photos[0] }} 
@@ -491,45 +433,31 @@ export default function MemoriesScreen() {
                     resizeMode="cover"
                   />
                 )}
-
-                <View style={styles.detailTextContent}>
-                  {/* Milestone Badge */}
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailTitle}>{selectedMemory.title}</Text>
                   {'milestone_date' in selectedMemory && (
-                    <View style={styles.detailMilestoneBadge}>
-                      <Ionicons name="star" size={16} color="#FFD700" />
-                      <Text style={styles.detailMilestoneText}>Milestone</Text>
+                    <View style={styles.milestoneTag}>
+                      <Ionicons name="trophy" size={14} color="#fff" />
+                      <Text style={styles.milestoneText}>Milestone</Text>
                     </View>
                   )}
-
-                  {/* Title */}
-                  <Text style={styles.detailTitle}>{selectedMemory.title}</Text>
-
-                  {/* Date */}
                   <Text style={styles.detailDate}>
-                    {format(
-                      new Date('milestone_date' in selectedMemory ? selectedMemory.milestone_date : selectedMemory.date), 
-                      'EEEE, MMMM d, yyyy'
+                    {selectedMemory && formatDate(
+                      'milestone_date' in selectedMemory 
+                        ? selectedMemory.milestone_date 
+                        : selectedMemory.date
                     )}
                   </Text>
-
-                  {/* Description */}
                   {selectedMemory.description && (
                     <Text style={styles.detailDescription}>
                       {selectedMemory.description}
                     </Text>
                   )}
-
-                  {/* Metadata */}
-                  <View style={styles.detailMetadata}>
-                    <Text style={styles.detailMetadataText}>
-                      Created {format(new Date(selectedMemory.created_at), 'MMM d, yyyy')}
-                    </Text>
-                  </View>
                 </View>
-              </>
+              </ScrollView>
             )}
-          </ScrollView>
-        </SafeAreaView>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -545,355 +473,243 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#E2E8F0',
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#2D3748',
   },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 12,
+  addButton: {
+    padding: 5,
   },
-  headerButton: {
-    padding: 4,
-  },
-  anniversaryCard: {
-    flexDirection: 'row',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fef2f8',
-    margin: 20,
-    padding: 16,
-    borderRadius: 16,
-    gap: 12,
   },
-  anniversaryContent: {
+  listContent: {
+    padding: 20,
+  },
+  memoryCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  memoryImage: {
+    width: '100%',
+    height: 200,
+    resizeMode: 'cover',
+  },
+  memoryContent: {
+    padding: 15,
+  },
+  memoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 5,
+  },
+  memoryTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2D3748',
     flex: 1,
   },
-  anniversaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+  milestoneTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F6AD55',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 10,
   },
-  anniversaryCountdown: {
+  milestoneText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 3,
+  },
+  memoryDescription: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+    color: '#718096',
+    marginBottom: 8,
+  },
+  memoryDate: {
+    fontSize: 12,
+    color: '#A0AEC0',
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingVertical: 60,
   },
-  emptyStateEmoji: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  emptyStateTitle: {
+  emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+    color: '#2D3748',
+    marginTop: 15,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#718096',
+    marginTop: 5,
     textAlign: 'center',
   },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  createFirstButton: {
-    backgroundColor: '#EC4899',
-    paddingHorizontal: 24,
+  emptyButton: {
+    marginTop: 20,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 24,
+    backgroundColor: '#EC4899',
+    borderRadius: 8,
   },
-  createFirstButtonText: {
+  emptyButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  memoriesList: {
-    padding: 20,
-  },
-  memoryRow: {
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  memoryCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    width: '48%',
-  },
-  memoryImage: {
-    width: '100%',
-    height: 120,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  memoryPlaceholder: {
-    width: '100%',
-    height: 120,
-    backgroundColor: '#f5f5f5',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  memoryInfo: {
-    padding: 12,
-  },
-  milestoneBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff4e6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-    gap: 4,
-  },
-  milestoneLabel: {
-    fontSize: 10,
-    color: '#f59e0b',
-    fontWeight: '500',
-  },
-  memoryTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  memoryDescription: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 8,
-  },
-  memoryDate: {
-    fontSize: 12,
-    color: '#999',
-  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center', // Changed from flex-end to center
-    paddingHorizontal: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderRadius: 20,
-    maxHeight: '75%', // Slightly smaller for memories screen
-    width: '100%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  modalForm: {
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20, // Extra bottom padding for iOS
-  },
-  imagePreviewContainer: {
-    position: 'relative',
-    marginBottom: 20,
-  },
-  imagePreview: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
-    backgroundColor: '#f5f5f5',
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 12,
-  },
-  addPhotoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 2,
-    borderColor: '#EC4899',
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    backgroundColor: '#fef2f8',
-  },
-  addPhotoText: {
-    fontSize: 16,
-    color: '#EC4899',
-    fontWeight: '500',
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2D3748',
   },
   typeSelector: {
     flexDirection: 'row',
-    gap: 12,
     marginBottom: 20,
+    gap: 10,
   },
   typeButton: {
     flex: 1,
-    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    backgroundColor: '#fff',
   },
-  selectedType: {
+  typeButtonActive: {
+    backgroundColor: '#EC4899',
     borderColor: '#EC4899',
-    backgroundColor: '#fef2f8',
   },
-  typeText: {
-    fontSize: 14,
-    color: '#666',
+  typeButtonText: {
+    fontSize: 16,
+    color: '#4A5568',
     fontWeight: '500',
   },
-  selectedTypeText: {
-    color: '#EC4899',
+  typeButtonTextActive: {
+    color: '#fff',
   },
-  inputGroup: {
+  imagePicker: {
+    height: 150,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 20,
+    overflow: 'hidden',
   },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 8,
+  selectedImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
-  titleInput: {
+  imagePickerText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#A0AEC0',
+  },
+  input: {
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
-    padding: 12,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    padding: 15,
     fontSize: 16,
-    backgroundColor: '#fff',
+    marginBottom: 15,
   },
-  descriptionInput: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#fff',
-    minHeight: 100,
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
   },
   saveButton: {
     backgroundColor: '#EC4899',
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 15,
+    borderRadius: 8,
     alignItems: 'center',
-    marginTop: 20,
+    marginBottom: 10,
   },
   saveButtonDisabled: {
-    backgroundColor: '#ccc',
+    opacity: 0.6,
   },
   saveButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // Detail Modal Styles
-  detailContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  detailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  detailHeaderTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
   },
-  detailContent: {
+  detailModalContent: {
     flex: 1,
+    backgroundColor: '#000',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1,
   },
   detailImage: {
     width: '100%',
-    height: 300,
-    backgroundColor: '#f5f5f5',
+    height: 400,
   },
-  detailTextContent: {
+  detailContent: {
     padding: 20,
-  },
-  detailMilestoneBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff4e6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-    marginBottom: 16,
-    gap: 6,
-  },
-  detailMilestoneText: {
-    fontSize: 14,
-    color: '#f59e0b',
-    fontWeight: '600',
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: -20,
   },
   detailTitle: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 8,
-    lineHeight: 30,
+    fontWeight: 'bold',
+    color: '#2D3748',
+    marginBottom: 10,
   },
   detailDate: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 20,
+    fontSize: 14,
+    color: '#718096',
+    marginBottom: 15,
   },
   detailDescription: {
     fontSize: 16,
-    color: '#333',
+    color: '#4A5568',
     lineHeight: 24,
-    marginBottom: 30,
-  },
-  detailMetadata: {
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  detailMetadataText: {
-    fontSize: 14,
-    color: '#999',
-    fontStyle: 'italic',
   },
 });
