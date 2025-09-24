@@ -2,9 +2,9 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform, View } from 'react-native';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { HapticTab } from '../../components/haptic-tab';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Custom tab icon with background highlight when focused
 const TabIcon = ({ focused, children }: { focused: boolean; children: React.ReactNode }) => (

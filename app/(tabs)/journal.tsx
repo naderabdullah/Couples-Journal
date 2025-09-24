@@ -1,9 +1,7 @@
 // app/(tabs)/journal.tsx
-import { useAuth } from '@/contexts/AuthContext';
-import { JournalEntry, supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +16,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../contexts/AuthContext';
+import { JournalEntry, supabase } from '../../lib/supabase';
 
 const MOODS = [
   { value: 'great', emoji: '😊', label: 'Great' },

@@ -1,10 +1,8 @@
 // app/(tabs)/index.tsx
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { format, isToday, isYesterday } from 'date-fns';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -15,6 +13,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 
 interface FeedItem {
   id: string;
