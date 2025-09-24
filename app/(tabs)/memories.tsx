@@ -6,17 +6,17 @@ import { differenceInDays, format } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -63,25 +63,35 @@ export default function MemoriesScreen() {
   const loadMemories = async () => {
     try {
       setLoading(true);
-      if (!user || !profile?.couple_id) return;
+      if (!user) return;
 
       // Load memories
-      const { data: memoriesData, error: memoriesError } = await supabase
+      let memoriesQuery = supabase
         .from('memories')
         .select('*')
-        .eq('couple_id', profile.couple_id)
         .order('date', { ascending: false });
 
+      // Load milestones  
+      let milestonesQuery = supabase
+        .from('milestones')
+        .select('*')
+        .order('milestone_date', { ascending: false });
+
+      if (profile?.couple_id) {
+        // If has partner, load couple entries
+        memoriesQuery = memoriesQuery.eq('couple_id', profile.couple_id);
+        milestonesQuery = milestonesQuery.eq('couple_id', profile.couple_id);
+      } else {
+        // If no partner, load only user's entries
+        memoriesQuery = memoriesQuery.eq('created_by', user.id);
+        milestonesQuery = milestonesQuery.eq('created_by', user.id);
+      }
+
+      const { data: memoriesData, error: memoriesError } = await memoriesQuery;
       if (memoriesError) throw memoriesError;
       setMemories(memoriesData || []);
 
-      // Load milestones
-      const { data: milestonesData, error: milestonesError } = await supabase
-        .from('milestones')
-        .select('*')
-        .eq('couple_id', profile.couple_id)
-        .order('milestone_date', { ascending: false });
-
+      const { data: milestonesData, error: milestonesError } = await milestonesQuery;
       if (milestonesError) throw milestonesError;
       setMilestones(milestonesData || []);
     } catch (error) {
@@ -108,18 +118,15 @@ export default function MemoriesScreen() {
 
   const saveMemory = async () => {
     try {
-      if (!user || !profile?.couple_id) return;
+      if (!user) return;
       if (!newMemory.title.trim()) {
         Alert.alert('Error', 'Please add a title for this memory');
         return;
       }
 
-      // In a real app, you'd upload the image to Supabase Storage here
-      // For now, we'll just save the memory metadata
-
       const table = newMemory.type === 'milestone' ? 'milestones' : 'memories';
       const data = {
-        couple_id: profile.couple_id,
+        couple_id: profile?.couple_id || user.id, // Use user_id as couple_id for solo entries
         created_by: user.id,
         title: newMemory.title.trim(),
         description: newMemory.description.trim() || null,
@@ -300,6 +307,7 @@ export default function MemoriesScreen() {
             <TextInput
               style={styles.titleInput}
               placeholder="Give this memory a title"
+              placeholderTextColor="#999" 
               value={newMemory.title}
               onChangeText={(text) => setNewMemory({ ...newMemory, title: text })}
             />
@@ -307,6 +315,7 @@ export default function MemoriesScreen() {
             <TextInput
               style={styles.descriptionInput}
               placeholder="Tell the story..."
+              placeholderTextColor="#999" 
               multiline
               numberOfLines={4}
               textAlignVertical="top"
@@ -438,7 +447,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: 60,        
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },

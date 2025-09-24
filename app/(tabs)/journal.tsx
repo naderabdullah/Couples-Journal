@@ -5,17 +5,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -46,13 +46,22 @@ export default function JournalScreen() {
   const loadEntries = async () => {
     try {
       setLoading(true);
-      if (!user || !profile?.couple_id) return;
+      if (!user) return;
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('journal_entries')
         .select('*')
-        .or(`user_id.eq.${user.id},and(couple_id.eq.${profile.couple_id},is_shared.eq.true)`)
         .order('created_at', { ascending: false });
+
+      if (profile?.couple_id) {
+        // If has partner, load couple entries
+        query = query.eq('couple_id', profile.couple_id);
+      } else {
+        // If no partner, load only user's entries
+        query = query.eq('user_id', user.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setEntries(data || []);
@@ -66,24 +75,26 @@ export default function JournalScreen() {
 
   const saveEntry = async () => {
     try {
-      if (!user || !profile?.couple_id) return;
+      if (!user) return;
       if (!newEntry.content.trim()) {
         Alert.alert('Error', 'Please write something in your journal entry');
         return;
       }
 
-      const { error } = await supabase.from('journal_entries').insert({
+      const entryData = {
         user_id: user.id,
-        couple_id: profile.couple_id,
+        couple_id: profile?.couple_id || user.id, // Use user_id as couple_id for solo entries
         title: newEntry.title.trim() || null,
         content: newEntry.content.trim(),
         mood: newEntry.mood,
-        is_shared: newEntry.is_shared,
-      });
+        is_shared: profile?.couple_id ? newEntry.is_shared : false, // Force false if no partner
+      };
+
+      const { error } = await supabase.from('journal_entries').insert(entryData);
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Journal entry saved!');
+      Alert.alert('Success', 'Journal entry saved! 💭');
       setModalVisible(false);
       setNewEntry({ title: '', content: '', mood: 'good', is_shared: false });
       loadEntries();
@@ -180,6 +191,7 @@ export default function JournalScreen() {
             <TextInput
               style={styles.titleInput}
               placeholder="Title (optional)"
+              placeholderTextColor="#999"
               value={newEntry.title}
               onChangeText={(text) => setNewEntry({ ...newEntry, title: text })}
             />
@@ -204,6 +216,7 @@ export default function JournalScreen() {
             <TextInput
               style={styles.contentInput}
               placeholder="What's on your mind?"
+              placeholderTextColor="#999"
               multiline
               numberOfLines={10}
               textAlignVertical="top"
@@ -211,13 +224,27 @@ export default function JournalScreen() {
               onChangeText={(text) => setNewEntry({ ...newEntry, content: text })}
             />
 
-            <View style={styles.shareToggle}>
-              <Text style={styles.shareLabel}>Share with partner</Text>
+            <View style={[styles.shareToggle, !profile?.couple_id && styles.shareToggleDisabled]}>
+              <View>
+                <Text style={[styles.shareLabel, !profile?.couple_id && styles.shareLabelDisabled]}>
+                  Share with partner
+                </Text>
+                {!profile?.couple_id && (
+                  <Text style={styles.shareHelperText}>
+                    Connect with a partner to share entries
+                  </Text>
+                )}
+              </View>
               <Switch
-                value={newEntry.is_shared}
-                onValueChange={(value) => setNewEntry({ ...newEntry, is_shared: value })}
-                trackColor={{ false: '#ccc', true: '#EC4899' }}
-                thumbColor={newEntry.is_shared ? '#fff' : '#f4f3f4'}
+                value={profile?.couple_id ? newEntry.is_shared : false}
+                onValueChange={(value) => {
+                  if (profile?.couple_id) {
+                    setNewEntry({ ...newEntry, is_shared: value });
+                  }
+                }}
+                trackColor={{ false: '#ccc', true: profile?.couple_id ? '#EC4899' : '#ccc' }}
+                thumbColor={newEntry.is_shared && profile?.couple_id ? '#fff' : '#f4f3f4'}
+                disabled={!profile?.couple_id}
               />
             </View>
           </ScrollView>
@@ -327,7 +354,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: 60,        
+    paddingBottom: 16,    
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
@@ -351,6 +379,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
     paddingVertical: 12,
     marginBottom: 24,
+    color: '#333',
   },
   label: {
     fontSize: 14,
@@ -392,6 +421,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 24,
     minHeight: 200,
+    color: '#333',
   },
   shareToggle: {
     flexDirection: 'row',
@@ -405,5 +435,16 @@ const styles = StyleSheet.create({
   shareLabel: {
     fontSize: 16,
     color: '#333',
+  },
+  shareToggleDisabled: {
+    opacity: 0.5,
+  },
+  shareLabelDisabled: {
+    color: '#999',
+  },
+  shareHelperText: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
   },
 });
