@@ -124,13 +124,18 @@ export default function MemoriesScreen() {
         throw error;
       }
 
-      // Get the public URL
-      const { data: publicData } = supabase.storage
+      // For private buckets, create a signed URL instead
+      const { data: signedData, error: signedError } = await supabase.storage
         .from('memory-photos')
-        .getPublicUrl(data.path);
+        .createSignedUrl(data.path, 60 * 60 * 24 * 365); // Valid for 1 year
 
-      console.log('Upload successful, URL:', publicData.publicUrl);
-      return publicData.publicUrl;
+      if (signedError) {
+        console.error('Signed URL error:', signedError);
+        throw signedError;
+      }
+
+      console.log('Upload successful, URL:', signedData.signedUrl);
+      return signedData.signedUrl;
     } catch (error: any) {
       console.error('Error uploading image:', error);
       Alert.alert('Error', `Failed to upload image: ${error?.message || 'Unknown error'}`);
