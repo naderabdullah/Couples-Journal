@@ -1,4 +1,4 @@
-// app/(tabs)/memories.tsx
+// app/(tabs)/memories.tsx - COMPLETE FIXED VERSION
 import { Ionicons } from '@expo/vector-icons';
 import { differenceInDays, format } from 'date-fns';
 // Use legacy API as recommended in the warning
@@ -186,65 +186,62 @@ export default function MemoriesScreen() {
         created_by: user.id,
         title: newMemory.title.trim(),
         description: newMemory.description.trim() || null,
-        photos: photoUrl ? [photoUrl] : null, // Store photo URL in array
+        photos: photoUrl ? [photoUrl] : null,
         ...(newMemory.type === 'milestone' 
-          ? { milestone_date: new Date().toISOString() }
-          : { date: new Date().toISOString() }
-        ),
+          ? { milestone_date: new Date().toISOString().split('T')[0] }
+          : { date: new Date().toISOString().split('T')[0] }
+        )
       };
 
       const { error } = await supabase
         .from(table)
-        .insert(data);
+        .insert([data]);
 
       if (error) throw error;
 
-      Alert.alert('Success', `${newMemory.type === 'milestone' ? 'Milestone' : 'Memory'} saved!`);
-      
-      // Reset form
-      setNewMemory({ title: '', description: '', type: 'memory' });
-      setSelectedImage(null);
+      // Reset form and close modal
       setModalVisible(false);
+      setSelectedImage(null);
+      setNewMemory({ title: '', description: '', type: 'memory' });
       
       // Reload memories
       loadMemories();
-    } catch (error) {
+      
+      Alert.alert('Success', `${newMemory.type === 'milestone' ? 'Milestone' : 'Memory'} saved!`);
+    } catch (error: any) {
       console.error('Error saving memory:', error);
-      Alert.alert('Error', 'Failed to save memory');
+      Alert.alert('Error', `Failed to save memory: ${error?.message || 'Unknown error'}`);
     }
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    const daysAgo = differenceInDays(new Date(), date);
-    
-    if (daysAgo === 0) return 'Today';
-    if (daysAgo === 1) return 'Yesterday';
-    if (daysAgo < 7) return `${daysAgo} days ago`;
+    const today = new Date();
+    const diffDays = differenceInDays(today, date);
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
     
     return format(date, 'MMM d, yyyy');
   };
 
-  const openMemoryDetail = (item: Memory | Milestone) => {
-    setSelectedMemory(item);
-    setDetailModalVisible(true);
-  };
-
   const renderMemory = ({ item }: { item: Memory | Milestone }) => {
-    const isMilestone = 'milestone_date' in item;
-    
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.memoryCard}
-        onPress={() => openMemoryDetail(item)}
+        onPress={() => {
+          setSelectedMemory(item);
+          setDetailModalVisible(true);
+        }}
       >
         {item.photos && item.photos[0] && (
           <Image source={{ uri: item.photos[0] }} style={styles.memoryImage} />
         )}
         <View style={styles.memoryContent}>
           <View style={styles.memoryHeader}>
-            <Text style={styles.memoryTitle}>{item.title}</Text>
-            {isMilestone && (
+            <Text style={styles.memoryTitle}>{item.title || 'Memory'}</Text>
+            {'milestone_date' in item && (
               <View style={styles.milestoneTag}>
                 <Ionicons name="trophy" size={12} color="#fff" />
                 <Text style={styles.milestoneText}>Milestone</Text>
@@ -257,7 +254,7 @@ export default function MemoriesScreen() {
             </Text>
           )}
           <Text style={styles.memoryDate}>
-            {formatDate(isMilestone ? item.milestone_date : item.date)}
+            {formatDate('milestone_date' in item ? item.milestone_date : item.date)}
           </Text>
         </View>
       </TouchableOpacity>
@@ -375,34 +372,35 @@ export default function MemoriesScreen() {
                   <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
                 ) : (
                   <>
-                    <Ionicons name="camera" size={32} color="#A0AEC0" />
-                    <Text style={styles.imagePickerText}>Add Photo</Text>
+                    <Ionicons name="camera" size={32} color="#CBD5E0" />
+                    <Text style={styles.imagePickerText}>Tap to add a photo</Text>
                   </>
                 )}
               </TouchableOpacity>
 
+              {/* Form Inputs */}
               <TextInput
                 style={styles.input}
                 placeholder="Title"
-                placeholderTextColor={"#A0AEC0"}
                 value={newMemory.title}
                 onChangeText={(text) => setNewMemory({ ...newMemory, title: text })}
+                maxLength={100}
               />
 
               <TextInput
                 style={[styles.input, styles.textArea]}
                 placeholder="Description (optional)"
-                placeholderTextColor={"#A0AEC0"}
                 value={newMemory.description}
                 onChangeText={(text) => setNewMemory({ ...newMemory, description: text })}
                 multiline
-                numberOfLines={4}
+                maxLength={500}
+                textAlignVertical="top"
               />
 
               <TouchableOpacity 
                 style={[styles.saveButton, uploading && styles.saveButtonDisabled]}
                 onPress={saveMemory}
-                disabled={uploading}
+                disabled={uploading || !newMemory.title.trim()}
               >
                 <Text style={styles.saveButtonText}>
                   {uploading ? 'Uploading...' : 'Save Memory'}
@@ -413,24 +411,28 @@ export default function MemoriesScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Memory Detail Modal */}
+      {/* CORRECTED Memory Detail Modal - Replace lines 340-396 with this */}
       <Modal
         visible={detailModalVisible}
         animationType="slide"
         transparent={true}
         onRequestClose={() => setDetailModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.detailModalContent}>
+        <View style={styles.detailModalOverlay}>
+          <View style={styles.detailModalContainer}>
             <TouchableOpacity 
-              style={styles.closeButton}
+              style={styles.detailCloseButton}
               onPress={() => setDetailModalVisible(false)}
             >
-              <Ionicons name="close-circle" size={32} color="#fff" />
+              <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
             
             {selectedMemory && (
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView 
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
+                {/* Image at the top */}
                 {selectedMemory.photos && selectedMemory.photos[0] && (
                   <Image 
                     source={{ uri: selectedMemory.photos[0] }} 
@@ -438,14 +440,19 @@ export default function MemoriesScreen() {
                     resizeMode="cover"
                   />
                 )}
+                
+                {/* Content below image */}
                 <View style={styles.detailContent}>
-                  <Text style={styles.detailTitle}>{selectedMemory.title}</Text>
-                  {'milestone_date' in selectedMemory && (
-                    <View style={styles.milestoneTag}>
-                      <Ionicons name="trophy" size={14} color="#fff" />
-                      <Text style={styles.milestoneText}>Milestone</Text>
-                    </View>
-                  )}
+                  <View style={styles.detailHeaderRow}>
+                    <Text style={styles.detailTitle}>{selectedMemory.title || 'Memory'}</Text>
+                    {'milestone_date' in selectedMemory && (
+                      <View style={styles.milestoneTagDetail}>
+                        <Ionicons name="trophy" size={16} color="#fff" />
+                        <Text style={styles.milestoneTextDetail}>Milestone</Text>
+                      </View>
+                    )}
+                  </View>
+                  
                   <Text style={styles.detailDate}>
                     {selectedMemory && formatDate(
                       'milestone_date' in selectedMemory 
@@ -453,11 +460,14 @@ export default function MemoriesScreen() {
                         : selectedMemory.date
                     )}
                   </Text>
+                  
                   {selectedMemory.description && (
                     <Text style={styles.detailDescription}>
                       {selectedMemory.description}
                     </Text>
                   )}
+                  
+                  <View style={{ height: 40 }} />
                 </View>
               </ScrollView>
             )}
@@ -680,41 +690,75 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  detailModalContent: {
+
+  // FIXED DETAIL MODAL STYLES
+  detailModalOverlay: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 60,
   },
-  closeButton: {
+  detailModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    maxHeight: '90%',
+    overflow: 'hidden',
+  },
+  detailCloseButton: {
     position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 1,
+    top: 15,
+    right: 15,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    padding: 8,
   },
   detailImage: {
     width: '100%',
-    height: 400,
+    height: 280,
+    backgroundColor: '#f5f5f5',
   },
   detailContent: {
-    padding: 20,
+    padding: 24,
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginTop: -20,
+  },
+  detailHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
   detailTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#2D3748',
-    marginBottom: 10,
+    flex: 1,
+    marginRight: 16,
+  },
+  milestoneTagDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F6AD55',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  milestoneTextDetail: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   detailDate: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#718096',
-    marginBottom: 15,
+    marginBottom: 20,
+    fontWeight: '500',
   },
   detailDescription: {
-    fontSize: 16,
+    fontSize: 17,
     color: '#4A5568',
-    lineHeight: 24,
+    lineHeight: 26,
   },
 });
