@@ -1,55 +1,29 @@
 // lib/supabase.ts
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
 import 'react-native-url-polyfill/auto';
 
-// Replace with your Supabase project URL and anon key
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabasekey = process.env.EXPO_PUBLIC_SUPABASE_KEY!;
 
-// Custom storage implementation using Expo SecureStore for tokens
-const ExpoSecureStoreAdapter = {
-  getItem: async (key: string): Promise<string | null> => {
-    try {
-      return await SecureStore.getItemAsync(key);
-    } catch (error) {
-      console.error('SecureStore getItem error:', error);
-      return null;
-    }
-  },
-  setItem: async (key: string, value: string): Promise<void> => {
-    try {
-      await SecureStore.setItemAsync(key, value);
-    } catch (error) {
-      console.error('SecureStore setItem error:', error);
-    }
-  },
-  removeItem: async (key: string): Promise<void> => {
-    try {
-      await SecureStore.deleteItemAsync(key);
-    } catch (error) {
-      console.error('SecureStore removeItem error:', error);
-    }
-  },
-};
-
+// SIMPLE - Just use AsyncStorage directly
 export const supabase = createClient(supabaseUrl, supabasekey, {
   auth: {
-    storage: ExpoSecureStoreAdapter,
-    autoRefreshToken: false,
-    persistSession: false,
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
     detectSessionInUrl: false,
   },
 });
 
-// Database Types (updated to handle solo users)
+// Database Types
 export interface Profile {
   id: string;
   email: string;
   display_name: string;
   avatar_url?: string;
   partner_id?: string;
-  couple_id?: string; // Can be null for solo users
+  couple_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -64,11 +38,10 @@ export interface Couple {
   status: 'pending' | 'active';
 }
 
-// Updated to allow null couple_id for solo entries
 export interface JournalEntry {
   id: string;
   user_id: string;
-  couple_id?: string | null; // Can be null for solo entries
+  couple_id?: string | null;
   title?: string;
   content: string;
   mood?: 'great' | 'good' | 'okay' | 'sad' | 'stressed';
@@ -82,49 +55,14 @@ export interface GratitudeEntry {
   id: string;
   from_user_id: string;
   to_user_id: string;
-  couple_id: string; // Still required since gratitudes need a partner
+  couple_id: string;
   content: string;
   created_at: string;
 }
 
-// Updated Memory interface to allow null couple_id
 export interface Memory {
   id: string;
-  couple_id?: string | null; // Can be null for solo memories
-  created_by: string;
-  title?: string;
-  description?: string;
-  photos?: string[];
-  date: string;
-  type?: string;
-  created_at: string;
-}
-
-// Updated Milestone interface to allow null couple_id
-export interface Milestone {
-  id: string;
-  couple_id?: string | null; // Can be null for solo milestones
-  title: string;
-  description?: string;
-  milestone_date: string;
-  photos?: string[];
-  created_by: string;
-  created_at: string;
-}
-
-export interface QuestionResponse {
-  id: string;
-  user_id: string;
-  couple_id: string;
-  question_id: string;
-  response: string;
-  created_at: string;
-}
-
-// Add Memory and Milestone interfaces
-export interface Memory {
-  id: string;
-  couple_id?: string | null; // Can be null for solo memories
+  couple_id?: string | null;
   created_by: string;
   title?: string;
   description?: string;
@@ -136,7 +74,7 @@ export interface Memory {
 
 export interface Milestone {
   id: string;
-  couple_id?: string | null; // Can be null for solo milestones
+  couple_id?: string | null;
   title: string;
   description?: string;
   milestone_date: string;

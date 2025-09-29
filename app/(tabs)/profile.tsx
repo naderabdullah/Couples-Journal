@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   },
   emailInput: {
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#0E0E0E',
     borderRadius: 12,
     padding: 12,
     fontSize: 16,

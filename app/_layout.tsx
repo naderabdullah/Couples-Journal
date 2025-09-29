@@ -1,3 +1,4 @@
+// app/_layout.tsx
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
@@ -15,23 +16,33 @@ function LoadingScreen() {
 
 // Main navigation logic
 function RootLayoutNav() {
-  const { session, loading } = useAuth();
+  const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    if (loading) return;
+    if (loading) return; // Still loading, don't navigate
 
     const inAuthGroup = segments[0] === '(auth)';
+    const inTabsGroup = segments[0] === '(tabs)';
 
-    if (session && inAuthGroup) {
-      // Signed in but trying to view auth routes → redirect to main app
-      router.replace('/(tabs)');
-    } else if (!session && !inAuthGroup) {
-      // Not signed in but trying to view main app → redirect to login
+    debugLog('Navigation check', { 
+      loading, 
+      user: !!user, 
+      inAuthGroup, 
+      inTabsGroup,
+      segments 
+    });
+
+    if (!user && !inAuthGroup) {
+      // Not signed in and not in auth group, redirect to login
       router.replace('/(auth)/login');
+    } else if (user && inAuthGroup) {
+      // Signed in but still in auth group, redirect to tabs
+      router.replace('/(tabs)');
     }
-  }, [session, segments, loading]);
+    // Otherwise, user is in the right place
+  }, [user, segments, loading]);
 
   if (loading) {
     return <LoadingScreen />;
@@ -43,26 +54,23 @@ function RootLayoutNav() {
         name="(auth)" 
         options={{ 
           headerShown: false,
-          animation: 'fade' 
         }} 
       />
       <Stack.Screen 
         name="(tabs)" 
         options={{ 
           headerShown: false,
-          animation: 'fade'
-        }} 
-      />
-      <Stack.Screen 
-        name="modal" 
-        options={{ 
-          presentation: 'modal',
-          animation: 'slide_from_bottom'
         }} 
       />
     </Stack>
   );
 }
+
+const debugLog = (message: string, data?: any) => {
+  if (__DEV__) {
+    console.log(`[Navigation] ${message}`, data || '');
+  }
+};
 
 export default function RootLayout() {
   return (

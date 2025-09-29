@@ -1,8 +1,6 @@
-// app/(tabs)/memories.tsx - COMPLETE FIXED VERSION
+// app/(tabs)/memories.tsx - Fixed version
 import { Ionicons } from '@expo/vector-icons';
-import { differenceInDays, format } from 'date-fns';
-// Use legacy API as recommended in the warning
-import * as FileSystem from 'expo-file-system/legacy';
+import { format } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
@@ -41,13 +39,22 @@ export default function MemoriesScreen() {
   });
 
   useEffect(() => {
-    loadMemories();
-  }, []);
+    if (user) {
+      loadMemories();
+    }
+  }, [user, profile]);
 
   const loadMemories = async () => {
     try {
       setLoading(true);
-      if (!user) return;
+      if (!user) {
+        console.log('No user found, skipping load');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Loading memories for user:', user.id);
+      console.log('Profile couple_id:', profile?.couple_id);
 
       // Load memories
       let memoriesQuery = supabase
@@ -63,10 +70,12 @@ export default function MemoriesScreen() {
 
       if (profile?.couple_id) {
         // If has partner, load couple entries
+        console.log('Loading couple memories for couple_id:', profile.couple_id);
         memoriesQuery = memoriesQuery.eq('couple_id', profile.couple_id);
         milestonesQuery = milestonesQuery.eq('couple_id', profile.couple_id);
       } else {
-        // FIXED: If no partner, load only user's entries with null couple_id
+        // If no partner, load only user's entries with null couple_id
+        console.log('Loading solo memories');
         memoriesQuery = memoriesQuery.is('couple_id', null).eq('created_by', user.id);
         milestonesQuery = milestonesQuery.is('couple_id', null).eq('created_by', user.id);
       }
@@ -76,10 +85,21 @@ export default function MemoriesScreen() {
         milestonesQuery
       ]);
 
+      if (memoriesResult.error) {
+        console.error('Memories query error:', memoriesResult.error);
+      }
+      if (milestonesResult.error) {
+        console.error('Milestones query error:', milestonesResult.error);
+      }
+
+      console.log(`Loaded ${memoriesResult.data?.length || 0} memories`);
+      console.log(`Loaded ${milestonesResult.data?.length || 0} milestones`);
+
       if (memoriesResult.data) setMemories(memoriesResult.data);
       if (milestonesResult.data) setMilestones(milestonesResult.data);
     } catch (error) {
       console.error('Error loading memories:', error);
+      Alert.alert('Error', 'Failed to load memories');
     } finally {
       setLoading(false);
     }
@@ -94,59 +114,39 @@ export default function MemoriesScreen() {
       }
 
       // Extract file extension
-      const fileExt = uri.split('.').pop() || 'jpg';
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `memories/${user?.id}/${fileName}`;
+      const fileExt = uri.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
 
-      // Read the file as base64 using the legacy API as recommended
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      // Read file as base64
+      // Use legacy import for base64 reading due to deprecation
+      // @ts-ignore
+      const base64 = await require('expo-file-system/legacy').readAsStringAsync(uri, 'base64');
 
-      // Convert base64 to binary for upload
-      const byteCharacters = atob(base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-
-      // Upload to Supabase storage
-      const { data, error } = await supabase.storage
-        .from('memory-photos')
-        .upload(filePath, byteArray, {
-          contentType: 'image/jpeg',
-          upsert: false
+      // Upload to Supabase Storage
+      const { error } = await supabase.storage
+        .from('memories')
+        .upload(filePath, decode(base64), {
+          contentType: `image/${fileExt}`,
         });
 
-      if (error) {
-        console.error('Upload error:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      // For private buckets, create a signed URL instead
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from('memory-photos')
-        .createSignedUrl(data.path, 60 * 60 * 24 * 365); // Valid for 1 year
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('memories')
+        .getPublicUrl(filePath);
 
-      if (signedError) {
-        console.error('Signed URL error:', signedError);
-        throw signedError;
-      }
-
-      console.log('Upload successful, URL:', signedData.signedUrl);
-      return signedData.signedUrl;
-    } catch (error: any) {
+      return publicUrl;
+    } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('Error', `Failed to upload image: ${error?.message || 'Unknown error'}`);
-      return null;
+      throw error;
     } finally {
       setUploading(false);
     }
   };
 
   const pickImage = async () => {
-    // Use the ImagePicker with correct mediaTypes format
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       allowsEditing: true,
@@ -154,79 +154,60 @@ export default function MemoriesScreen() {
       quality: 0.8,
     });
 
-    if (!result.canceled && result.assets[0]) {
+    if (!result.canceled) {
       setSelectedImage(result.assets[0].uri);
-      setModalVisible(true);
     }
   };
 
   const saveMemory = async () => {
     try {
       if (!user) return;
+      
       if (!newMemory.title.trim()) {
-        Alert.alert('Error', 'Please add a title for this memory');
+        Alert.alert('Error', 'Please add a title for your memory');
         return;
       }
 
       let photoUrl = null;
-      
-      // Upload image if one was selected
       if (selectedImage) {
         photoUrl = await uploadImage(selectedImage);
-        if (!photoUrl) {
-          Alert.alert('Error', 'Failed to upload image');
-          return;
-        }
       }
 
-      const table = newMemory.type === 'milestone' ? 'milestones' : 'memories';
-      const data = {
-        // FIXED: Use null for solo users instead of user.id
+      const memoryData: any = {
         couple_id: profile?.couple_id || null,
         created_by: user.id,
         title: newMemory.title.trim(),
         description: newMemory.description.trim() || null,
         photos: photoUrl ? [photoUrl] : null,
-        ...(newMemory.type === 'milestone' 
-          ? { milestone_date: new Date().toISOString().split('T')[0] }
-          : { date: new Date().toISOString().split('T')[0] }
-        )
+        date: new Date().toISOString(),
+        type: newMemory.type,
       };
 
-      const { error } = await supabase
-        .from(table)
-        .insert([data]);
+      console.log('Saving memory:', memoryData);
 
-      if (error) throw error;
+      const { error } = await supabase.from('memories').insert(memoryData);
 
-      // Reset form and close modal
+      if (error) {
+        console.error('Error saving memory:', error);
+        throw error;
+      }
+
+      Alert.alert('Success', 'Memory saved! 📸');
       setModalVisible(false);
-      setSelectedImage(null);
       setNewMemory({ title: '', description: '', type: 'memory' });
-      
-      // Reload memories
+      setSelectedImage(null);
       loadMemories();
-      
-      Alert.alert('Success', `${newMemory.type === 'milestone' ? 'Milestone' : 'Memory'} saved!`);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error saving memory:', error);
-      Alert.alert('Error', `Failed to save memory: ${error?.message || 'Unknown error'}`);
+      Alert.alert('Error', 'Failed to save memory');
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const diffDays = differenceInDays(today, date);
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
+  const renderMemoryItem = ({ item }: { item: Memory | Milestone }) => {
+    const isMemory = 'created_by' in item;
+    const date = isMemory ? (item as Memory).date : (item as Milestone).milestone_date;
+    const photos = isMemory ? (item as Memory).photos : (item as Milestone).photos;
     
-    return format(date, 'MMM d, yyyy');
-  };
-
-  const renderMemory = ({ item }: { item: Memory | Milestone }) => {
     return (
       <TouchableOpacity
         style={styles.memoryCard}
@@ -235,16 +216,15 @@ export default function MemoriesScreen() {
           setDetailModalVisible(true);
         }}
       >
-        {item.photos && item.photos[0] && (
-          <Image source={{ uri: item.photos[0] }} style={styles.memoryImage} />
+        {photos && photos[0] && (
+          <Image source={{ uri: photos[0] }} style={styles.memoryImage} />
         )}
         <View style={styles.memoryContent}>
           <View style={styles.memoryHeader}>
-            <Text style={styles.memoryTitle}>{item.title || 'Memory'}</Text>
-            {'milestone_date' in item && (
-              <View style={styles.milestoneTag}>
-                <Ionicons name="trophy" size={12} color="#fff" />
-                <Text style={styles.milestoneText}>Milestone</Text>
+            <Text style={styles.memoryTitle}>{item.title}</Text>
+            {!isMemory && (
+              <View style={styles.milestoneBadge}>
+                <Ionicons name="trophy" size={12} color="#F59E0B" />
               </View>
             )}
           </View>
@@ -254,50 +234,44 @@ export default function MemoriesScreen() {
             </Text>
           )}
           <Text style={styles.memoryDate}>
-            {formatDate('milestone_date' in item ? item.milestone_date : item.date)}
+            {format(new Date(date), 'MMM d, yyyy')}
           </Text>
         </View>
       </TouchableOpacity>
     );
   };
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <Ionicons name="images-outline" size={64} color="#CBD5E0" />
-      <Text style={styles.emptyTitle}>No memories yet</Text>
-      <Text style={styles.emptyText}>
-        Start capturing your special moments together
-      </Text>
-      <TouchableOpacity 
-        style={styles.emptyButton}
-        onPress={() => setModalVisible(true)}
-      >
-        <Text style={styles.emptyButtonText}>Add Your First Memory</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  // Helper function to decode base64
+  const decode = (base64: string) => {
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  };
 
-  if (loading) {
+  const allItems = [...memories, ...milestones].sort((a, b) => {
+    const dateA = 'date' in a ? a.date : (a as Milestone).milestone_date;
+    const dateB = 'date' in b ? b.date : (b as Milestone).milestone_date;
+    return new Date(dateB).getTime() - new Date(dateA).getTime();
+  });
+
+  if (!user) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#EC4899" />
+        <View style={styles.centerContent}>
+          <Text style={styles.emptyText}>Please sign in to view your memories</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const allItems = [...memories, ...milestones].sort((a, b) => {
-    const dateA = 'milestone_date' in a ? a.milestone_date : a.date;
-    const dateB = 'milestone_date' in b ? b.milestone_date : b.date;
-    return new Date(dateB).getTime() - new Date(dateA).getTime();
-  });
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Memories</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.addButton}
           onPress={() => setModalVisible(true)}
         >
@@ -305,174 +279,122 @@ export default function MemoriesScreen() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={allItems}
-        renderItem={renderMemory}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={renderEmptyState}
-      />
+      {loading ? (
+        <ActivityIndicator size="large" color="#EC4899" style={{ marginTop: 20 }} />
+      ) : allItems.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="images-outline" size={64} color="#E0E0E0" />
+          <Text style={styles.emptyTitle}>No memories yet</Text>
+          <Text style={styles.emptyText}>
+            Start capturing your special moments
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={allItems}
+          renderItem={renderMemoryItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       {/* Add Memory Modal */}
       <Modal
         visible={modalVisible}
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
+        presentationStyle="pageSheet"
       >
         <KeyboardAvoidingView 
+          style={styles.modalContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
         >
-          <View style={styles.modalContent}>
+          <SafeAreaView style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>New Memory</Text>
               <TouchableOpacity onPress={() => {
                 setModalVisible(false);
                 setSelectedImage(null);
-                setNewMemory({ title: '', description: '', type: 'memory' });
               }}>
-                <Ionicons name="close" size={24} color="#4A5568" />
+                <Text style={styles.cancelButton}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>New Memory</Text>
+              <TouchableOpacity onPress={saveMemory} disabled={uploading}>
+                <Text style={[styles.saveButton, uploading && styles.saveButtonDisabled]}>
+                  {uploading ? 'Saving...' : 'Save'}
+                </Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Memory Type Selector */}
-              <View style={styles.typeSelector}>
-                <TouchableOpacity
-                  style={[
-                    styles.typeButton,
-                    newMemory.type === 'memory' && styles.typeButtonActive
-                  ]}
-                  onPress={() => setNewMemory({ ...newMemory, type: 'memory' })}
-                >
-                  <Text style={[
-                    styles.typeButtonText,
-                    newMemory.type === 'memory' && styles.typeButtonTextActive
-                  ]}>Memory</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.typeButton,
-                    newMemory.type === 'milestone' && styles.typeButtonActive
-                  ]}
-                  onPress={() => setNewMemory({ ...newMemory, type: 'milestone' })}
-                >
-                  <Text style={[
-                    styles.typeButtonText,
-                    newMemory.type === 'milestone' && styles.typeButtonTextActive
-                  ]}>Milestone</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Image Picker */}
-              <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
+            <ScrollView style={styles.modalContent}>
+              <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
                 {selectedImage ? (
                   <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
                 ) : (
                   <>
-                    <Ionicons name="camera" size={32} color="#CBD5E0" />
-                    <Text style={styles.imagePickerText}>Tap to add a photo</Text>
+                    <Ionicons name="camera" size={40} color="#9CA3AF" />
+                    <Text style={styles.imagePickerText}>Add Photo</Text>
                   </>
                 )}
               </TouchableOpacity>
 
-              {/* Form Inputs */}
               <TextInput
-                style={styles.input}
-                placeholder="Title"
+                style={styles.titleInput}
+                placeholder="Give this memory a title"
                 value={newMemory.title}
                 onChangeText={(text) => setNewMemory({ ...newMemory, title: text })}
-                maxLength={100}
+                placeholderTextColor="#A0A0A0"
               />
 
               <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Description (optional)"
+                style={styles.descriptionInput}
+                placeholder="Describe this moment..."
                 value={newMemory.description}
                 onChangeText={(text) => setNewMemory({ ...newMemory, description: text })}
                 multiline
-                maxLength={500}
                 textAlignVertical="top"
+                placeholderTextColor="#A0A0A0"
               />
-
-              <TouchableOpacity 
-                style={[styles.saveButton, uploading && styles.saveButtonDisabled]}
-                onPress={saveMemory}
-                disabled={uploading || !newMemory.title.trim()}
-              >
-                <Text style={styles.saveButtonText}>
-                  {uploading ? 'Uploading...' : 'Save Memory'}
-                </Text>
-              </TouchableOpacity>
             </ScrollView>
-          </View>
+          </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* CORRECTED Memory Detail Modal - Replace lines 340-396 with this */}
+      {/* Detail Modal */}
       <Modal
         visible={detailModalVisible}
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setDetailModalVisible(false)}
+        presentationStyle="pageSheet"
       >
-        <View style={styles.detailModalOverlay}>
-          <View style={styles.detailModalContainer}>
-            <TouchableOpacity 
-              style={styles.detailCloseButton}
-              onPress={() => setDetailModalVisible(false)}
-            >
-              <Ionicons name="close" size={24} color="#fff" />
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setDetailModalVisible(false)}>
+              <Text style={styles.cancelButton}>Close</Text>
             </TouchableOpacity>
-            
-            {selectedMemory && (
-              <ScrollView 
-                showsVerticalScrollIndicator={false}
-                bounces={false}
-              >
-                {/* Image at the top */}
-                {selectedMemory.photos && selectedMemory.photos[0] && (
-                  <Image 
-                    source={{ uri: selectedMemory.photos[0] }} 
-                    style={styles.detailImage}
-                    resizeMode="cover"
-                  />
-                )}
-                
-                {/* Content below image */}
-                <View style={styles.detailContent}>
-                  <View style={styles.detailHeaderRow}>
-                    <Text style={styles.detailTitle}>{selectedMemory.title || 'Memory'}</Text>
-                    {'milestone_date' in selectedMemory && (
-                      <View style={styles.milestoneTagDetail}>
-                        <Ionicons name="trophy" size={16} color="#fff" />
-                        <Text style={styles.milestoneTextDetail}>Milestone</Text>
-                      </View>
-                    )}
-                  </View>
-                  
-                  <Text style={styles.detailDate}>
-                    {selectedMemory && formatDate(
-                      'milestone_date' in selectedMemory 
-                        ? selectedMemory.milestone_date 
-                        : selectedMemory.date
-                    )}
-                  </Text>
-                  
-                  {selectedMemory.description && (
-                    <Text style={styles.detailDescription}>
-                      {selectedMemory.description}
-                    </Text>
-                  )}
-                  
-                  <View style={{ height: 40 }} />
-                </View>
-              </ScrollView>
-            )}
+            <Text style={styles.modalTitle}>Memory</Text>
+            <View style={{ width: 50 }} />
           </View>
-        </View>
+
+          {selectedMemory && (
+            <ScrollView style={styles.modalContent}>
+              {selectedMemory.photos && selectedMemory.photos[0] && (
+                <Image 
+                  source={{ uri: selectedMemory.photos[0] }} 
+                  style={styles.detailImage}
+                />
+              )}
+              <Text style={styles.detailTitle}>{selectedMemory.title}</Text>
+              {selectedMemory.description && (
+                <Text style={styles.detailDescription}>{selectedMemory.description}</Text>
+              )}
+              <Text style={styles.detailDate}>
+                {format(
+                  new Date('date' in selectedMemory ? selectedMemory.date : (selectedMemory as Milestone).milestone_date),
+                  'MMMM d, yyyy'
+                )}
+              </Text>
+            </ScrollView>
+          )}
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -481,7 +403,12 @@ export default function MemoriesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F9FAFB',
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -489,21 +416,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#F3F4F6',
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#2D3748',
+    color: '#1F2937',
   },
   addButton: {
     padding: 5,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   listContent: {
     padding: 20,
@@ -513,10 +436,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
     overflow: 'hidden',
   },
   memoryImage: {
@@ -530,235 +453,138 @@ const styles = StyleSheet.create({
   memoryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 5,
+    alignItems: 'center',
+    marginBottom: 8,
   },
   memoryTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#2D3748',
+    color: '#1F2937',
     flex: 1,
   },
-  milestoneTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F6AD55',
+  milestoneBadge: {
+    backgroundColor: '#FEF3C7',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    marginLeft: 10,
-  },
-  milestoneText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
-    marginLeft: 3,
   },
   memoryDescription: {
     fontSize: 14,
-    color: '#718096',
+    color: '#6B7280',
     marginBottom: 8,
+    lineHeight: 20,
   },
   memoryDate: {
     fontSize: 12,
-    color: '#A0AEC0',
+    color: '#9CA3AF',
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingHorizontal: 40,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
-    color: '#2D3748',
-    marginTop: 15,
+    color: '#6B7280',
+    marginTop: 20,
+    marginBottom: 10,
   },
   emptyText: {
     fontSize: 14,
-    color: '#718096',
-    marginTop: 5,
+    color: '#9CA3AF',
     textAlign: 'center',
   },
-  emptyButton: {
-    marginTop: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#EC4899',
-    borderRadius: 8,
-  },
-  emptyButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalOverlay: {
+  modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2D3748',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
   },
-  typeSelector: {
-    flexDirection: 'row',
-    marginBottom: 20,
-    gap: 10,
-  },
-  typeButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'center',
-  },
-  typeButtonActive: {
-    backgroundColor: '#EC4899',
-    borderColor: '#EC4899',
-  },
-  typeButtonText: {
+  cancelButton: {
     fontSize: 16,
-    color: '#4A5568',
-    fontWeight: '500',
+    color: '#6B7280',
   },
-  typeButtonTextActive: {
-    color: '#fff',
+  saveButton: {
+    fontSize: 16,
+    color: '#EC4899',
+    fontWeight: '600',
   },
-  imagePicker: {
-    height: 150,
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    borderStyle: 'dashed',
+  saveButtonDisabled: {
+    color: '#D1D5DB',
+  },
+  modalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  imagePickerButton: {
+    height: 200,
+    backgroundColor: '#F9FAFB',
     borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
-    overflow: 'hidden',
   },
   selectedImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
+    borderRadius: 12,
   },
   imagePickerText: {
-    marginTop: 8,
+    marginTop: 10,
+    color: '#9CA3AF',
     fontSize: 14,
-    color: '#A0AEC0',
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    padding: 15,
-    fontSize: 16,
-    marginBottom: 15,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  saveButton: {
-    backgroundColor: '#EC4899',
-    paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: '#fff',
+  titleInput: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '500',
+    marginBottom: 15,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-
-  // FIXED DETAIL MODAL STYLES
-  detailModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 60,
-  },
-  detailModalContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    maxHeight: '90%',
-    overflow: 'hidden',
-  },
-  detailCloseButton: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    zIndex: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 20,
-    padding: 8,
+  descriptionInput: {
+    fontSize: 16,
+    lineHeight: 24,
+    minHeight: 150,
+    paddingVertical: 10,
   },
   detailImage: {
     width: '100%',
-    height: 280,
-    backgroundColor: '#f5f5f5',
-  },
-  detailContent: {
-    padding: 24,
-    backgroundColor: '#fff',
-  },
-  detailHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    height: 300,
+    borderRadius: 12,
+    marginBottom: 20,
   },
   detailTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#2D3748',
-    flex: 1,
-    marginRight: 16,
-  },
-  milestoneTagDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F6AD55',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  milestoneTextDetail: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  detailDate: {
-    fontSize: 16,
-    color: '#718096',
-    marginBottom: 20,
-    fontWeight: '500',
+    color: '#1F2937',
+    marginBottom: 10,
   },
   detailDescription: {
-    fontSize: 17,
-    color: '#4A5568',
-    lineHeight: 26,
+    fontSize: 16,
+    color: '#4B5563',
+    lineHeight: 24,
+    marginBottom: 20,
+  },
+  detailDate: {
+    fontSize: 14,
+    color: '#9CA3AF',
   },
 });

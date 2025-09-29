@@ -40,13 +40,22 @@ export default function JournalScreen() {
   });
 
   useEffect(() => {
-    loadEntries();
-  }, []);
+    if (user) {
+      loadEntries();
+    }
+  }, [user, profile]);
 
   const loadEntries = async () => {
     try {
       setLoading(true);
-      if (!user) return;
+      if (!user) {
+        console.log('No user found, skipping load');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Loading journal entries for user:', user.id);
+      console.log('Profile couple_id:', profile?.couple_id);
 
       let query = supabase
         .from('journal_entries')
@@ -55,15 +64,22 @@ export default function JournalScreen() {
 
       if (profile?.couple_id) {
         // If has partner, load couple entries
+        console.log('Loading couple entries for couple_id:', profile.couple_id);
         query = query.eq('couple_id', profile.couple_id);
       } else {
-        // If no partner, load only user's entries
-        query = query.eq('user_id', user.id);
+        // If no partner, load only user's entries (with null couple_id)
+        console.log('Loading solo entries for user');
+        query = query.eq('user_id', user.id).is('couple_id', null);
       }
 
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      console.log(`Loaded ${data?.length || 0} journal entries`);
       setEntries(data || []);
     } catch (error) {
       console.error('Error loading entries:', error);
@@ -81,18 +97,24 @@ export default function JournalScreen() {
         return;
       }
 
-      const entryData = {
+      // FIXED: Use null for solo users, not user.id
+      const entryData: any = {
         user_id: user.id,
-        couple_id: profile?.couple_id || user.id, // Use user_id as couple_id for solo entries
+        couple_id: profile?.couple_id || null, // Use null for solo entries
         title: newEntry.title.trim() || null,
         content: newEntry.content.trim(),
         mood: newEntry.mood,
-        is_shared: profile?.couple_id ? newEntry.is_shared : false, // Force false if no partner
+        is_shared: profile?.couple_id ? newEntry.is_shared : false,
       };
+
+      console.log('Saving entry:', entryData);
 
       const { error } = await supabase.from('journal_entries').insert(entryData);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error saving entry:', error);
+        throw error;
+      }
 
       Alert.alert('Success', 'Journal entry saved! 💭');
       setModalVisible(false);
@@ -116,13 +138,13 @@ export default function JournalScreen() {
             <Text style={styles.entryDate}>
               {format(new Date(item.created_at), 'MMM d, yyyy')}
             </Text>
-            {item.is_shared && (
+            {item.is_shared && profile?.couple_id && (
               <View style={styles.sharedBadge}>
                 <Ionicons name="people" size={12} color="#EC4899" />
               </View>
             )}
           </View>
-          {!isMyEntry && (
+          {!isMyEntry && profile?.couple_id && (
             <Text style={styles.partnerLabel}>Partner's Entry</Text>
           )}
         </View>
@@ -137,6 +159,16 @@ export default function JournalScreen() {
       </View>
     );
   };
+
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContent}>
+          <Text style={styles.emptyText}>Please sign in to view your journal</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -154,10 +186,10 @@ export default function JournalScreen() {
         <ActivityIndicator size="large" color="#EC4899" style={{ marginTop: 20 }} />
       ) : entries.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons name="book-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>No journal entries yet</Text>
-          <Text style={styles.emptySubtext}>
-            Start writing to capture your thoughts and memories
+          <Ionicons name="book-outline" size={64} color="#E0E0E0" />
+          <Text style={styles.emptyTitle}>No journal entries yet</Text>
+          <Text style={styles.emptyText}>
+            Tap the + button to write your first entry
           </Text>
         </View>
       ) : (
@@ -170,16 +202,16 @@ export default function JournalScreen() {
         />
       )}
 
+      {/* Add Entry Modal */}
       <Modal
-        animationType="slide"
-        transparent={false}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        animationType="slide"
+        presentationStyle="pageSheet"
       >
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => setModalVisible(false)}>
-              <Ionicons name="close" size={28} color="#333" />
+              <Text style={styles.cancelButton}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>New Entry</Text>
             <TouchableOpacity onPress={saveEntry}>
@@ -191,24 +223,24 @@ export default function JournalScreen() {
             <TextInput
               style={styles.titleInput}
               placeholder="Title (optional)"
-              placeholderTextColor="#999"
               value={newEntry.title}
               onChangeText={(text) => setNewEntry({ ...newEntry, title: text })}
+              placeholderTextColor="#A0A0A0"
             />
 
             <Text style={styles.label}>How are you feeling?</Text>
-            <View style={styles.moodSelector}>
+            <View style={styles.moodContainer}>
               {MOODS.map((mood) => (
                 <TouchableOpacity
                   key={mood.value}
                   style={[
-                    styles.moodOption,
-                    newEntry.mood === mood.value && styles.selectedMood,
+                    styles.moodButton,
+                    newEntry.mood === mood.value && styles.moodButtonActive,
                   ]}
                   onPress={() => setNewEntry({ ...newEntry, mood: mood.value as any })}
                 >
-                  <Text style={styles.moodOptionEmoji}>{mood.emoji}</Text>
-                  <Text style={styles.moodOptionLabel}>{mood.label}</Text>
+                  <Text style={styles.moodButtonEmoji}>{mood.emoji}</Text>
+                  <Text style={styles.moodButtonLabel}>{mood.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -216,37 +248,24 @@ export default function JournalScreen() {
             <TextInput
               style={styles.contentInput}
               placeholder="What's on your mind?"
-              placeholderTextColor="#999"
-              multiline
-              numberOfLines={10}
-              textAlignVertical="top"
               value={newEntry.content}
               onChangeText={(text) => setNewEntry({ ...newEntry, content: text })}
+              multiline
+              textAlignVertical="top"
+              placeholderTextColor="#A0A0A0"
             />
 
-            <View style={[styles.shareToggle, !profile?.couple_id && styles.shareToggleDisabled]}>
-              <View>
-                <Text style={[styles.shareLabel, !profile?.couple_id && styles.shareLabelDisabled]}>
-                  Share with partner
-                </Text>
-                {!profile?.couple_id && (
-                  <Text style={styles.shareHelperText}>
-                    Connect with a partner to share entries
-                  </Text>
-                )}
+            {profile?.couple_id && (
+              <View style={styles.shareContainer}>
+                <Text style={styles.shareLabel}>Share with partner</Text>
+                <Switch
+                  value={newEntry.is_shared}
+                  onValueChange={(value) => setNewEntry({ ...newEntry, is_shared: value })}
+                  trackColor={{ false: '#E0E0E0', true: '#FCE4EC' }}
+                  thumbColor={newEntry.is_shared ? '#EC4899' : '#f4f3f4'}
+                />
               </View>
-              <Switch
-                value={profile?.couple_id ? newEntry.is_shared : false}
-                onValueChange={(value) => {
-                  if (profile?.couple_id) {
-                    setNewEntry({ ...newEntry, is_shared: value });
-                  }
-                }}
-                trackColor={{ false: '#ccc', true: profile?.couple_id ? '#EC4899' : '#ccc' }}
-                thumbColor={newEntry.is_shared && profile?.couple_id ? '#fff' : '#f4f3f4'}
-                disabled={!profile?.couple_id}
-              />
-            </View>
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -257,42 +276,52 @@ export default function JournalScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F9FAFB',
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 15,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#F3F4F6',
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1F2937',
   },
   addButton: {
-    padding: 4,
+    padding: 5,
   },
   listContent: {
     padding: 20,
   },
   entryCard: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 15,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   partnerEntry: {
-    backgroundColor: '#fef2f8',
+    backgroundColor: '#FDF2F8',
   },
   entryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   entryMeta: {
     flexDirection: 'row',
@@ -304,15 +333,16 @@ const styles = StyleSheet.create({
   },
   entryDate: {
     fontSize: 12,
-    color: '#666',
+    color: '#6B7280',
   },
   sharedBadge: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FCE4EC',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 10,
-    padding: 4,
   },
   partnerLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#EC4899',
     fontWeight: '500',
   },
@@ -320,11 +350,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
-    color: '#333',
+    color: '#1F2937',
   },
   entryContent: {
     fontSize: 14,
-    color: '#666',
+    color: '#4B5563',
     lineHeight: 20,
   },
   emptyState: {
@@ -333,17 +363,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 40,
   },
-  emptyText: {
+  emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
-    marginTop: 16,
+    color: '#6B7280',
+    marginTop: 20,
+    marginBottom: 10,
   },
-  emptySubtext: {
+  emptyText: {
     fontSize: 14,
-    color: '#666',
+    color: '#9CA3AF',
     textAlign: 'center',
-    marginTop: 8,
   },
   modalContainer: {
     flex: 1,
@@ -354,19 +384,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,        
-    paddingBottom: 16,    
+    paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#E5E7EB',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: '#1F2937',
+  },
+  cancelButton: {
+    fontSize: 16,
+    color: '#6B7280',
   },
   saveButton: {
-    color: '#EC4899',
     fontSize: 16,
+    color: '#EC4899',
     fontWeight: '600',
   },
   modalContent: {
@@ -374,77 +407,62 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   titleInput: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '500',
+    marginBottom: 20,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    paddingVertical: 12,
-    marginBottom: 24,
-    color: '#333',
+    borderBottomColor: '#E5E7EB',
   },
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#333',
-    marginBottom: 12,
+    color: '#6B7280',
+    marginBottom: 10,
   },
-  moodSelector: {
+  moodContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
+    gap: 10,
+    marginBottom: 25,
   },
-  moodOption: {
+  moodButton: {
+    flex: 1,
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#f0f0f0',
-    minWidth: 60,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  selectedMood: {
+  moodButtonActive: {
+    backgroundColor: '#FCE4EC',
     borderColor: '#EC4899',
-    backgroundColor: '#fef2f8',
   },
-  moodOptionEmoji: {
+  moodButtonEmoji: {
     fontSize: 24,
     marginBottom: 4,
   },
-  moodOptionLabel: {
-    fontSize: 12,
-    color: '#666',
+  moodButtonLabel: {
+    fontSize: 11,
+    color: '#6B7280',
   },
   contentInput: {
     fontSize: 16,
     lineHeight: 24,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
     minHeight: 200,
-    color: '#333',
+    paddingVertical: 10,
   },
-  shareToggle: {
+  shareContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
+    paddingVertical: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    marginTop: 20,
   },
   shareLabel: {
     fontSize: 16,
-    color: '#333',
-  },
-  shareToggleDisabled: {
-    opacity: 0.5,
-  },
-  shareLabelDisabled: {
-    color: '#999',
-  },
-  shareHelperText: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
+    color: '#1F2937',
   },
 });

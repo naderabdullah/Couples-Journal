@@ -1,3 +1,4 @@
+// contexts/AuthContext.tsx
 import { Session, User } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Profile, supabase } from '../lib/supabase';
@@ -24,29 +25,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
+    // Just get the damn session - no timeout, no retries, just get it
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        // Try to get profile but don't block on it
         fetchProfile(session.user.id);
-      } else {
-        setLoading(false);
       }
+      setLoading(false); // DONE LOADING, MOVE ON
     });
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // Listen for changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth event:', event);
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        await fetchProfile(session.user.id);
+        fetchProfile(session.user.id);
       } else {
         setProfile(null);
-        setLoading(false);
       }
     });
 
@@ -55,7 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -63,15 +61,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        console.error('Error fetching profile:', error);
+        console.error('Profile error:', error);
+        // If profile doesn't exist, create it
+        if (error.code === 'PGRST116') {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('profiles').insert({
+              id: userId,
+              email: user.email!,
+              display_name: user.email?.split('@')[0] || 'User',
+            });
+          }
+        }
         return;
       }
 
       setProfile(data);
     } catch (error) {
-      console.error('Error in fetchProfile:', error);
-    } finally {
-      setLoading(false);
+      console.error('Profile fetch error:', error);
     }
   };
 
@@ -80,33 +87,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            display_name: displayName,
-          },
-        },
       });
 
       if (error) throw error;
 
       // Create profile
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            email: data.user.email!,
-            display_name: displayName,
-          });
-
-        if (profileError) {
-          console.error('Error creating profile:', profileError);
-        }
+        await supabase.from('profiles').insert({
+          id: data.user.id,
+          email: data.user.email!,
+          display_name: displayName,
+        });
       }
 
       return { data, error: null };
     } catch (error) {
-      console.error('Error signing up:', error);
+      console.error('Sign up error:', error);
       return { data: null, error };
     }
   };
@@ -121,23 +117,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      console.error('Error signing in:', error);
+      console.error('Sign in error:', error);
       return { data: null, error };
     }
   };
 
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      await supabase.auth.signOut();
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error('Sign out error:', error);
     }
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {
     try {
-      if (!user) throw new Error('No user logged in');
+      if (!user) throw new Error('No user');
 
       const { error } = await supabase
         .from('profiles')
@@ -145,20 +140,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', user.id);
 
       if (error) throw error;
-
-      // Refresh profile
       await fetchProfile(user.id);
     } catch (error) {
-      console.error('Error updating profile:', error);
+      console.error('Update profile error:', error);
       throw error;
     }
   };
 
   const sendPartnerInvite = async (partnerEmail: string) => {
     try {
-      if (!user || !profile) throw new Error('No user logged in');
+      if (!user) throw new Error('No user');
 
-      // Check if partner exists
       const { data: partnerData, error: partnerError } = await supabase
         .from('profiles')
         .select('id')
@@ -169,8 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Partner not found. They need to create an account first.');
       }
 
-      // Create couple record
-      const { data: coupleData, error: coupleError } = await supabase
+      const { data, error } = await supabase
         .from('couples')
         .insert({
           partner1_id: user.id,
@@ -180,41 +171,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .select()
         .single();
 
-      if (coupleError) throw coupleError;
-
-      return { data: coupleData, error: null };
+      if (error) throw error;
+      return { data, error: null };
     } catch (error) {
-      console.error('Error sending partner invite:', error);
       return { data: null, error };
     }
   };
 
   const acceptPartnerInvite = async (coupleId: string) => {
     try {
-      if (!user) throw new Error('No user logged in');
+      if (!user) throw new Error('No user');
 
-      // Update couple status to active
-      const { error: coupleError } = await supabase
+      await supabase
         .from('couples')
         .update({ status: 'active' })
         .eq('id', coupleId);
 
-      if (coupleError) throw coupleError;
-
-      // Update both partners' profiles with couple_id
-      const { error: profileError } = await supabase
+      await supabase
         .from('profiles')
         .update({ couple_id: coupleId })
         .in('id', [user.id]);
 
-      if (profileError) throw profileError;
-
-      // Refresh profile
       await fetchProfile(user.id);
-
       return { success: true, error: null };
     } catch (error) {
-      console.error('Error accepting partner invite:', error);
       return { success: false, error };
     }
   };
