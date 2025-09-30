@@ -1,6 +1,7 @@
 // app/(tabs)/connect.tsx
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { format, startOfDay } from 'date-fns';
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -49,6 +50,7 @@ export default function ConnectScreen() {
   const [loading, setLoading] = useState(true);
   const [submittingQuestion, setSubmittingQuestion] = useState(false);
   const [submittingGratitude, setSubmittingGratitude] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     loadTodayData();
@@ -195,8 +197,22 @@ export default function ConnectScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Connect</Text>
+        <View style={styles.headerContainer}>
+          <View style={styles.header}>
+            <TouchableOpacity 
+              onPress={() => router.push('/(tabs)')}
+              style={styles.backButton}
+            >
+              <Ionicons name="arrow-back" size={24} color="#1F2937" />
+            </TouchableOpacity>
+            
+            <View style={styles.headerCenter}>
+              <Text style={styles.headerTitle}>Connect</Text>
+            </View>
+            
+            <View style={styles.headerRight} />
+          </View>
+          
           <Text style={styles.headerSubtitle}>Strengthen your bond daily</Text>
         </View>
 
@@ -326,20 +342,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  headerContainer: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 15,
     paddingBottom: 10,
   },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
   headerTitle: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1F2937',
+  },
+  headerRight: {
+    width: 40,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 4,
+    color: '#6B7280',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 10,
   },
   section: {
     padding: 20,
@@ -347,13 +385,13 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
+    marginLeft: 8,  // CHANGED from gap: 8
   },
   questionCard: {
     backgroundColor: '#f9fafb',
@@ -390,7 +428,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   responsesContainer: {
-    gap: 12,
+    // REMOVED gap: 12
   },
   responseCard: {
     backgroundColor: '#fff',
@@ -398,6 +436,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#f0f0f0',
+    marginBottom: 12,  // ADDED instead of gap
   },
   partnerResponseCard: {
     backgroundColor: '#fef2f8',
@@ -418,11 +457,11 @@ const styles = StyleSheet.create({
   waitingCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   waitingText: {
     fontSize: 14,
     color: '#999',
+    marginLeft: 12,  // CHANGED from gap: 12
   },
   noQuestionCard: {
     backgroundColor: '#f9fafb',
@@ -457,13 +496,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     marginTop: 12,
   },
   gratitudeButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+    marginLeft: 8,  // CHANGED from gap: 8
   },
   recentGratitudes: {
     marginTop: 20,
@@ -477,7 +516,6 @@ const styles = StyleSheet.create({
   gratitudeItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
@@ -487,5 +525,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
+    marginLeft: 8,  // CHANGED from gap: 8
   },
 });

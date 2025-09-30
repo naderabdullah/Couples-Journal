@@ -1,11 +1,9 @@
 // app/(tabs)/index.tsx
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { format, isToday, isYesterday } from 'date-fns';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,365 +14,199 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
-interface FeedItem {
+interface NavTile {
   id: string;
-  type: 'journal' | 'gratitude' | 'memory' | 'milestone' | 'question';
-  user_id: string;
-  content?: string;
-  title?: string;
-  mood?: string;
-  created_at: string;
-  partner_name?: string;
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  route: string;
 }
 
 export default function HomeScreen() {
   const router = useRouter();
   const { profile, user } = useAuth();
-  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [partnerName, setPartnerName] = useState('');
-  const [coupleStats, setCoupleStats] = useState({
-    daysogether: 0,
-    sharedEntries: 0,
-    gratitudes: 0,
+  const [greeting, setGreeting] = useState('');
+  const [stats, setStats] = useState({
+    daysTogether: 0,
+    entriesCount: 0,
+    memoriesCount: 0,
   });
 
+  const navTiles: NavTile[] = [
+    {
+      id: 'journal',
+      title: 'Journal',
+      subtitle: 'Write your thoughts',
+      icon: 'book',
+      color: '#EC4899',
+      route: '/(tabs)/journal',
+    },
+    {
+      id: 'connect',
+      title: 'Connect',
+      subtitle: 'Share gratitude & answer questions',
+      icon: 'heart',
+      color: '#EF4444',
+      route: '/(tabs)/connect',
+    },
+    {
+      id: 'memories',
+      title: 'Memories',
+      subtitle: 'Capture special moments',
+      icon: 'images',
+      color: '#8B5CF6',
+      route: '/(tabs)/memories',
+    },
+    {
+      id: 'profile',
+      title: 'Profile',
+      subtitle: 'Settings & preferences',
+      icon: 'person-circle',
+      color: '#3B82F6',
+      route: '/(tabs)/profile',
+    },
+  ];
+
   useEffect(() => {
-    loadDashboard();
+    loadData();
+    setGreeting(getGreeting());
   }, []);
 
-  const loadDashboard = async () => {
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  const loadData = async () => {
     try {
-      if (!user || !profile?.couple_id || !profile?.partner_id) {
+      if (!user || !profile) {
         setLoading(false);
         return;
       }
 
-      // Get partner's name
-      const { data: partnerProfile } = await supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('id', profile.partner_id)
-        .single();
+      // Get couple stats
+      if (profile.couple_id) {
+        const { data: coupleData } = await supabase
+          .from('couples')
+          .select('created_at')
+          .eq('id', profile.couple_id)
+          .single();
 
-      if (partnerProfile) {
-        setPartnerName(partnerProfile.display_name);
-      }
+        if (coupleData) {
+          const daysTogether = Math.floor(
+            (new Date().getTime() - new Date(coupleData.created_at).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          setStats(prev => ({ ...prev, daysTogether: daysTogether }));
+        }
 
-      // Load recent shared journal entries
-      const { data: journalEntries } = await supabase
-        .from('journal_entries')
-        .select('*')
-        .eq('couple_id', profile.couple_id)
-        .eq('is_shared', true)
-        .order('created_at', { ascending: false })
-        .limit(5);
+        // Get entries count
+        const { count: entriesCount } = await supabase
+          .from('journal_entries')
+          .select('*', { count: 'exact', head: true })
+          .eq('couple_id', profile.couple_id);
 
-      // Load recent gratitudes
-      const { data: gratitudes } = await supabase
-        .from('gratitude_entries')
-        .select('*')
-        .eq('couple_id', profile.couple_id)
-        .order('created_at', { ascending: false })
-        .limit(5);
+        // Get memories count
+        const { count: memoriesCount } = await supabase
+          .from('memories')
+          .select('*', { count: 'exact', head: true })
+          .eq('couple_id', profile.couple_id);
 
-      // Load recent memories
-      const { data: memories } = await supabase
-        .from('memories')
-        .select('*')
-        .eq('couple_id', profile.couple_id)
-        .order('created_at', { ascending: false })
-        .limit(3);
-
-      // Load recent milestones
-      const { data: milestones } = await supabase
-        .from('milestones')
-        .select('*')
-        .eq('couple_id', profile.couple_id)
-        .order('created_at', { ascending: false })
-        .limit(3);
-
-      // Combine and sort all feed items
-      const allItems: FeedItem[] = [];
-
-      if (journalEntries) {
-        journalEntries.forEach(entry => {
-          allItems.push({
-            id: entry.id,
-            type: 'journal',
-            user_id: entry.user_id,
-            content: entry.content,
-            title: entry.title,
-            mood: entry.mood,
-            created_at: entry.created_at,
-            partner_name: entry.user_id === profile.partner_id ? partnerName : 'You',
-          });
-        });
-      }
-
-      if (gratitudes) {
-        gratitudes.forEach(gratitude => {
-          allItems.push({
-            id: gratitude.id,
-            type: 'gratitude',
-            user_id: gratitude.from_user_id,
-            content: gratitude.content,
-            created_at: gratitude.created_at,
-            partner_name: gratitude.from_user_id === profile.partner_id ? partnerName : 'You',
-          });
-        });
-      }
-
-      if (memories) {
-        memories.forEach(memory => {
-          allItems.push({
-            id: memory.id,
-            type: 'memory',
-            user_id: memory.created_by,
-            title: memory.title,
-            content: memory.description,
-            created_at: memory.created_at,
-            partner_name: memory.created_by === profile.partner_id ? partnerName : 'You',
-          });
-        });
-      }
-
-      if (milestones) {
-        milestones.forEach(milestone => {
-          allItems.push({
-            id: milestone.id,
-            type: 'milestone',
-            user_id: milestone.created_by,
-            title: milestone.title,
-            content: milestone.description,
-            created_at: milestone.created_at,
-            partner_name: milestone.created_by === profile.partner_id ? partnerName : 'You',
-          });
-        });
-      }
-
-      // Sort by date
-      allItems.sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
-      setFeedItems(allItems.slice(0, 10));
-
-      // Calculate stats
-      const { data: coupleData } = await supabase
-        .from('couples')
-        .select('created_at')
-        .eq('id', profile.couple_id)
-        .single();
-
-      if (coupleData) {
-        const daysTogether = Math.floor(
-          (new Date().getTime() - new Date(coupleData.created_at).getTime()) / (1000 * 60 * 60 * 24)
-        );
-
-        setCoupleStats({
-          daysogether: daysTogether,
-          sharedEntries: journalEntries?.length || 0,
-          gratitudes: gratitudes?.length || 0,
-        });
+        setStats(prev => ({
+          ...prev,
+          entriesCount: entriesCount || 0,
+          memoriesCount: memoriesCount || 0,
+        }));
       }
     } catch (error) {
       console.error('Error loading dashboard:', error);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadDashboard();
+  const handleTilePress = (route: string) => {
+    router.push(route as any);
   };
 
-  const getTimeLabel = (date: string) => {
-    const d = new Date(date);
-    if (isToday(d)) return 'Today';
-    if (isYesterday(d)) return 'Yesterday';
-    return format(d, 'MMM d');
-  };
-
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'journal':
-        return <Ionicons name="book" size={16} color="#EC4899" />;
-      case 'gratitude':
-        return <Ionicons name="heart" size={16} color="#EC4899" />;
-      case 'memory':
-        return <Ionicons name="image" size={16} color="#EC4899" />;
-      case 'milestone':
-        return <Ionicons name="star" size={16} color="#FFD700" />;
-      default:
-        return null;
-    }
-  };
-
-  const getMoodEmoji = (mood?: string) => {
-    const moods: Record<string, string> = {
-      great: '😊',
-      good: '🙂',
-      okay: '😐',
-      sad: '😢',
-      stressed: '😰',
-    };
-    return mood ? moods[mood] || '' : '';
-  };
-
-  if (!profile?.couple_id) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.noCoupleContainer}>
-          <MaterialCommunityIcons name="heart-broken" size={64} color="#ccc" />
-          <Text style={styles.noCoupleTitle}>You're not connected yet</Text>
-          <Text style={styles.noCoupleText}>
-            Connect with your partner to start your journey together
-          </Text>
-          <TouchableOpacity
-            style={styles.connectButton}
-            onPress={() => router.push('/profile')}
-          >
-            <Text style={styles.connectButtonText}>Go to Profile</Text>
-          </TouchableOpacity>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#EC4899" />
         </View>
       </SafeAreaView>
     );
   }
 
-  if (loading) {
+  if (!user) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#EC4899" style={{ marginTop: 50 }} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.greeting}>Not logged in</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
       >
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Welcome back!</Text>
-            <Text style={styles.coupleNames}>
-              {profile.display_name} & {partnerName}
-            </Text>
+            <Text style={styles.greeting}>{greeting}!</Text>
+            <Text style={styles.userName}>{profile?.display_name || 'Welcome'}</Text>
           </View>
-          <TouchableOpacity onPress={() => router.push('/profile')}>
-            <Ionicons name="settings-outline" size={24} color="#333" />
-          </TouchableOpacity>
         </View>
 
         {/* Stats Cards */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.statsContainer}
-        >
-          <View style={styles.statCard}>
-            <Ionicons name="calendar" size={24} color="#EC4899" />
-            <Text style={styles.statNumber}>{coupleStats.daysogether}</Text>
-            <Text style={styles.statLabel}>Days Together</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <Ionicons name="book" size={24} color="#EC4899" />
-            <Text style={styles.statNumber}>{coupleStats.sharedEntries}</Text>
-            <Text style={styles.statLabel}>Shared Entries</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <Ionicons name="heart" size={24} color="#EC4899" />
-            <Text style={styles.statNumber}>{coupleStats.gratitudes}</Text>
-            <Text style={styles.statLabel}>Gratitudes</Text>
-          </View>
-        </ScrollView>
-
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => router.push('/journal')}
-            >
-              <Ionicons name="create" size={24} color="#EC4899" />
-              <Text style={styles.actionText}>Write Entry</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => router.push('/connect')}
-            >
-              <MaterialCommunityIcons name="comment-question" size={24} color="#EC4899" />
-              <Text style={styles.actionText}>Daily Question</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => router.push('/memories')}
-            >
-              <Ionicons name="camera" size={24} color="#EC4899" />
-              <Text style={styles.actionText}>Add Memory</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => router.push('/connect')}
-            >
-              <Ionicons name="heart" size={24} color="#EC4899" />
-              <Text style={styles.actionText}>Send Love</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Activity Feed */}
-        <View style={styles.feedSection}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          
-          {feedItems.length === 0 ? (
-            <View style={styles.emptyFeed}>
-              <Text style={styles.emptyFeedText}>
-                No shared activities yet. Start journaling together!
-              </Text>
+        {profile?.couple_id && (
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <Ionicons name="calendar" size={24} color="#EC4899" />
+              <Text style={styles.statNumber}>{stats.daysTogether}</Text>
+              <Text style={styles.statLabel}>Days Together</Text>
             </View>
-          ) : (
-            feedItems.map((item) => (
-              <View key={item.id} style={styles.feedItem}>
-                <View style={styles.feedItemHeader}>
-                  <View style={styles.feedItemMeta}>
-                    {getIcon(item.type)}
-                    <Text style={styles.feedItemAuthor}>{item.partner_name}</Text>
-                    {item.mood && (
-                      <Text style={styles.feedItemMood}>{getMoodEmoji(item.mood)}</Text>
-                    )}
-                  </View>
-                  <Text style={styles.feedItemTime}>
-                    {getTimeLabel(item.created_at)}
-                  </Text>
-                </View>
-                
-                {item.title && (
-                  <Text style={styles.feedItemTitle}>{item.title}</Text>
-                )}
-                
-                {item.content && (
-                  <Text style={styles.feedItemContent} numberOfLines={2}>
-                    {item.content}
-                  </Text>
-                )}
+            <View style={styles.statCard}>
+              <Ionicons name="book" size={24} color="#8B5CF6" />
+              <Text style={styles.statNumber}>{stats.entriesCount}</Text>
+              <Text style={styles.statLabel}>Entries</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Ionicons name="images" size={24} color="#3B82F6" />
+              <Text style={styles.statNumber}>{stats.memoriesCount}</Text>
+              <Text style={styles.statLabel}>Memories</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Navigation Tiles */}
+        <View style={styles.tilesContainer}>
+          <Text style={styles.sectionTitle}>What would you like to do?</Text>
+          {navTiles.map((tile) => (
+            <TouchableOpacity
+              key={tile.id}
+              style={[styles.tile, { borderLeftColor: tile.color }]}
+              onPress={() => handleTilePress(tile.route)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.iconContainer, { backgroundColor: tile.color + '15' }]}>
+                <Ionicons name={tile.icon} size={32} color={tile.color} />
               </View>
-            ))
-          )}
+              <View style={styles.tileContent}>
+                <Text style={styles.tileTitle}>{tile.title}</Text>
+                <Text style={styles.tileSubtitle}>{tile.subtitle}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
+            </TouchableOpacity>
+          ))}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -384,160 +216,108 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F9FAFB',
   },
-  noCoupleContainer: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
   },
-  noCoupleTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: 16,
-  },
-  noCoupleText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  connectButton: {
-    backgroundColor: '#EC4899',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24,
-  },
-  connectButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  scrollContent: {
+    paddingBottom: 30,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 20,
-    paddingBottom: 16,
+    paddingBottom: 24,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   greeting: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 16,
+    color: '#6B7280',
+    marginBottom: 4,
   },
-  coupleNames: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: 4,
+  userName: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1F2937',
   },
   statsContainer: {
+    flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingBottom: 16,
-    gap: 12,
+    paddingVertical: 20,
+    justifyContent: 'space-between',  // ADD THIS
   },
   statCard: {
-    backgroundColor: '#fef2f8',
+    flex: 1,
+    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
-    minWidth: 100,
-    marginRight: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    marginHorizontal: 6,  // ADD THIS (12/2 = 6 on each side)
   },
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1F2937',
     marginTop: 8,
   },
   statLabel: {
     fontSize: 12,
-    color: '#666',
+    color: '#6B7280',
     marginTop: 4,
+    textAlign: 'center',
   },
-  quickActions: {
+  tilesContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: 8,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+    color: '#1F2937',
+    marginBottom: 16,
   },
-  actionButtons: {
+  tile: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  actionButton: {
+  iconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  tileContent: {
     flex: 1,
-    minWidth: '45%',
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    gap: 8,
   },
-  actionText: {
-    fontSize: 12,
-    color: '#333',
-    fontWeight: '500',
-  },
-  feedSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  emptyFeed: {
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  emptyFeedText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-  },
-  feedItem: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  feedItemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  feedItemMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  feedItemAuthor: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#EC4899',
-  },
-  feedItemMood: {
-    fontSize: 16,
-  },
-  feedItemTime: {
-    fontSize: 11,
-    color: '#999',
-  },
-  feedItemTitle: {
-    fontSize: 14,
+  tileTitle: {
+    fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: '#1F2937',
     marginBottom: 4,
   },
-  feedItemContent: {
-    fontSize: 13,
-    color: '#666',
-    lineHeight: 18,
+  tileSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
   },
 });

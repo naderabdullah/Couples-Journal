@@ -2,6 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -270,6 +271,12 @@ export default function MemoriesScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => router.push('/(tabs)')}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color="#1F2937" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Memories</Text>
         <TouchableOpacity
           style={styles.addButton}
@@ -420,13 +427,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
+  backButton: {
+    padding: 4,
+    width: 32,
+  },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#1F2937',
+    flex: 1,
+    textAlign: 'center',
   },
   addButton: {
-    padding: 5,
+    padding: 0,
   },
   listContent: {
     padding: 20,

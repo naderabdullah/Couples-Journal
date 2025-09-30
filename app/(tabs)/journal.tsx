@@ -1,6 +1,7 @@
 // app/(tabs)/journal.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -173,6 +174,12 @@ export default function JournalScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => router.push('/(tabs)')}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color="#1F2937" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Journal</Text>
         <TouchableOpacity
           style={styles.addButton}
@@ -297,9 +304,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#1F2937',
+    flex: 1,
+    textAlign: 'center',
   },
   addButton: {
-    padding: 5,
+    padding: 0,
+  },
+  backButton: {
+    padding: 4,
+    width: 32, // Match the add button width for balance
   },
   listContent: {
     padding: 20,
@@ -326,7 +339,6 @@ const styles = StyleSheet.create({
   entryMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   moodEmoji: {
     fontSize: 20,
@@ -422,7 +434,6 @@ const styles = StyleSheet.create({
   },
   moodContainer: {
     flexDirection: 'row',
-    gap: 10,
     marginBottom: 25,
   },
   moodButton: {

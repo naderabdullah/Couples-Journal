@@ -9,6 +9,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: '#EC4899',
         tabBarInactiveTintColor: '#9CA3AF',
         headerShown: false,
+        tabBarStyle: { display: 'none' }, // Hide the tab bar
       }}
     >
       <Tabs.Screen

@@ -61,7 +61,18 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Profile</Text>
+          <TouchableOpacity 
+            onPress={() => router.push('/(tabs)')}
+            style={styles.backButton}
+          >
+            <Ionicons name="arrow-back" size={24} color="#1F2937" />
+          </TouchableOpacity>
+          
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Profile</Text>
+          </View>
+          
+          <View style={styles.headerRight} />
         </View>
 
         {/* Profile Info */}
@@ -189,14 +200,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 10,
+    paddingBottom: 15,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1F2937',
+  },
+  headerRight: {
+    width: 40,
   },
   profileSection: {
     alignItems: 'center',
@@ -230,7 +259,6 @@ const styles = StyleSheet.create({
   connectedCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     backgroundColor: '#fef2f8',
     padding: 16,
     borderRadius: 12,
@@ -250,7 +278,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingVertical: 12,
     borderRadius: 12,
   },
@@ -270,7 +297,6 @@ const styles = StyleSheet.create({
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   settingText: {
     fontSize: 16,
@@ -280,7 +306,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     marginHorizontal: 20,
     marginVertical: 20,
     paddingVertical: 12,
