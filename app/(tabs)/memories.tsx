@@ -119,7 +119,7 @@ export default function MemoriesScreen() {
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `memories/${user.id}/${fileName}`;
 
-      // Read file as base64 - ONLY CHANGE: use 'base64' string
+      // Read file as base64 - USE STRING NOT ENUM
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: 'base64',
       });
@@ -142,16 +142,18 @@ export default function MemoriesScreen() {
 
       if (error) throw error;
 
-      // Get public URL (bucket is public)
-      const { data: { publicUrl } } = supabase.storage
+      // CREATE SIGNED URL FOR PRIVATE BUCKET
+      const { data: signedData, error: signedError } = await supabase.storage
         .from('memory-photos')
-        .getPublicUrl(data.path);
+        .createSignedUrl(data.path, 60 * 60 * 24 * 365);
 
-      console.log('✅ Photo uploaded:', publicUrl);
-      return publicUrl;
+      if (signedError) throw signedError;
+
+      console.log('✅ Signed URL:', signedData.signedUrl);
+      return signedData.signedUrl;
     } catch (error: any) {
-      console.error('❌ Upload error:', error);
-      Alert.alert('Error', `Failed to upload: ${error?.message}`);
+      console.error('❌ Error:', error);
+      Alert.alert('Error', error?.message);
       return null;
     } finally {
       setUploading(false);
