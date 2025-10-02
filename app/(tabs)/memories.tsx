@@ -1,6 +1,7 @@
 // app/(tabs)/memories.tsx - Fixed version
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -114,34 +115,44 @@ export default function MemoriesScreen() {
         throw new Error('No user logged in');
       }
 
-      // Extract file extension
-      const fileExt = uri.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `${user.id}/${fileName}`;
+      const fileExt = uri.split('.').pop() || 'jpg';
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `memories/${user.id}/${fileName}`;
 
-      // Read file as base64
-      // Use legacy import for base64 reading due to deprecation
-      // @ts-ignore
-      const base64 = await require('expo-file-system/legacy').readAsStringAsync(uri, 'base64');
+      // Read file as base64 - ONLY CHANGE: use 'base64' string
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64',
+      });
 
-      // Upload to Supabase Storage
-      const { error } = await supabase.storage
-        .from('memories')
-        .upload(filePath, decode(base64), {
+      // Convert to binary
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+
+      // Upload
+      const { data, error } = await supabase.storage
+        .from('memory-photos')
+        .upload(filePath, byteArray, {
           contentType: `image/${fileExt}`,
+          upsert: false
         });
 
       if (error) throw error;
 
-      // Get public URL
+      // Get public URL (bucket is public)
       const { data: { publicUrl } } = supabase.storage
-        .from('memories')
-        .getPublicUrl(filePath);
+        .from('memory-photos')
+        .getPublicUrl(data.path);
 
+      console.log('✅ Photo uploaded:', publicUrl);
       return publicUrl;
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      throw error;
+    } catch (error: any) {
+      console.error('❌ Upload error:', error);
+      Alert.alert('Error', `Failed to upload: ${error?.message}`);
+      return null;
     } finally {
       setUploading(false);
     }
@@ -186,7 +197,10 @@ export default function MemoriesScreen() {
 
       console.log('Saving memory:', memoryData);
 
-      const { error } = await supabase.from('memories').insert(memoryData);
+      // Insert into DATABASE table 'memories'
+      const { error } = await supabase
+        .from('memories')  // DATABASE table name
+        .insert(memoryData);
 
       if (error) {
         console.error('Error saving memory:', error);
