@@ -6,7 +6,6 @@ import 'react-native-url-polyfill/auto';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabasekey = process.env.EXPO_PUBLIC_SUPABASE_KEY!;
 
-// SIMPLE - Just use AsyncStorage directly
 export const supabase = createClient(supabaseUrl, supabasekey, {
   auth: {
     storage: AsyncStorage,
@@ -66,9 +65,17 @@ export interface Memory {
   created_by: string;
   title?: string;
   description?: string;
-  photos?: string[];
-  date: string;
-  type?: string;
+  is_shared: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryItem {
+  id: string;
+  memory_id: string;
+  type: 'photo' | 'journal' | 'audio';
+  content?: string;
+  file_url?: string;
   created_at: string;
 }
 
