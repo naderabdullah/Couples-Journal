@@ -1,6 +1,7 @@
 // app/(tabs)/memories.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
@@ -8,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -23,6 +25,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { Memory, MemoryItem, supabase } from '../../lib/supabase';
+import { formatDuration, playAudio, startRecording, stopRecording } from '../../utils/audioRecording';
+import { compressImage, formatFileSize } from '../../utils/imageCompression';
 
 interface MemoryWithItems extends Memory {
   items?: MemoryItem[];
@@ -32,6 +36,8 @@ interface MemoryWithItems extends Memory {
 
 type ItemType = 'photo' | 'journal' | 'audio';
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 export default function MemoriesScreen() {
   const { profile, user } = useAuth();
   const [memories, setMemories] = useState<MemoryWithItems[]>([]);
@@ -39,9 +45,18 @@ export default function MemoriesScreen() {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [showAddItemView, setShowAddItemView] = useState(false);
+  const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedMemory, setSelectedMemory] = useState<MemoryWithItems | null>(null);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
+  
+  // Audio recording state
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [playingSound, setPlayingSound] = useState<Audio.Sound | null>(null);
+  const [playingItemId, setPlayingItemId] = useState<string | null>(null);
   
   const [newMemory, setNewMemory] = useState({
     title: '',
@@ -52,6 +67,8 @@ export default function MemoriesScreen() {
     type: 'photo' as ItemType,
     content: '',
     selectedImage: null as string | null,
+    recordedAudio: null as string | null,
+    audioDuration: 0,
   });
 
   useEffect(() => {
@@ -59,6 +76,37 @@ export default function MemoriesScreen() {
       loadMemories();
     }
   }, [user, profile]);
+
+  useEffect(() => {
+    // Cleanup when closing the add item view
+    if (!showAddItemView) {
+      if (recording) {
+        if ((recording as any).durationInterval) {
+          clearInterval((recording as any).durationInterval);
+        }
+        recording.stopAndUnloadAsync().catch(() => {});
+        setRecording(null);
+        setIsRecording(false);
+        setRecordingDuration(0);
+      }
+    }
+  }, [showAddItemView]);
+
+  useEffect(() => {
+    // Cleanup audio on unmount
+    return () => {
+      if (playingSound) {
+        playingSound.stopAsync().catch(() => {});
+        playingSound.unloadAsync().catch(() => {});
+      }
+      if (recording) {
+        if ((recording as any).durationInterval) {
+          clearInterval((recording as any).durationInterval);
+        }
+        recording.stopAndUnloadAsync().catch(() => {});
+      }
+    };
+  }, [playingSound, recording]);
 
   const loadMemories = async () => {
     try {
@@ -111,6 +159,21 @@ export default function MemoriesScreen() {
       Alert.alert('Error', 'Failed to load memories');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMemoryItems = async (memoryId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('memory_items')
+        .select('*')
+        .eq('memory_id', memoryId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setMemoryItems(data || []);
+    } catch (error) {
+      console.error('Error loading items:', error);
     }
   };
 
@@ -192,11 +255,10 @@ export default function MemoriesScreen() {
 
             if (error) throw error;
 
-            Alert.alert('Success', 'Item deleted');
             if (selectedMemory) {
               loadMemoryItems(selectedMemory.id);
+              loadMemories();
             }
-            loadMemories();
           } catch (error) {
             console.error('Error deleting item:', error);
             Alert.alert('Error', 'Failed to delete item');
@@ -206,34 +268,25 @@ export default function MemoriesScreen() {
     ]);
   };
 
-  const loadMemoryItems = async (memoryId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('memory_items')
-        .select('*')
-        .eq('memory_id', memoryId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      setMemoryItems(data || []);
-    } catch (error) {
-      console.error('Error loading memory items:', error);
-      Alert.alert('Error', 'Failed to load items');
-    }
-  };
-
   const uploadImage = async (uri: string) => {
     try {
+      if (!user) return null;
       setUploading(true);
 
-      if (!user) throw new Error('No user logged in');
+      // Compress image before uploading
+      const compressed = await compressImage(uri);
+      
+      // Log compression stats (optional - remove in production)
+      console.log('Original size:', formatFileSize(compressed.originalSize));
+      console.log('Compressed size:', formatFileSize(compressed.compressedSize));
+      console.log('Compression ratio:', compressed.compressionRatio.toFixed(1) + '%');
 
-      const fileExt = uri.split('.').pop() || 'jpg';
+      const fileExt = 'jpg'; // Always JPEG after compression
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `memories/${user.id}/${fileName}`;
 
-      const base64 = await FileSystem.readAsStringAsync(uri, {
+      // Read the compressed image as base64
+      const base64 = await FileSystem.readAsStringAsync(compressed.uri, {
         encoding: 'base64',
       });
 
@@ -259,6 +312,9 @@ export default function MemoriesScreen() {
 
       if (signedError) throw signedError;
 
+      // Clean up the temporary compressed file
+      await FileSystem.deleteAsync(compressed.uri, { idempotent: true });
+
       return signedData.signedUrl;
     } catch (error: any) {
       console.error('Upload error:', error);
@@ -279,6 +335,136 @@ export default function MemoriesScreen() {
 
     if (!result.canceled) {
       setNewItem({ ...newItem, selectedImage: result.assets[0].uri });
+    }
+  };
+
+  const uploadAudio = async (uri: string) => {
+    try {
+      if (!user) return null;
+      setUploading(true);
+
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.m4a`;
+      const filePath = `memories/${user.id}/${fileName}`;
+
+      // Read audio file as base64
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64',
+      });
+
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+
+      // Use audio/mp4 which is the native format for .m4a files
+      const { data, error } = await supabase.storage
+        .from('memory-photos')
+        .upload(filePath, byteArray, {
+          contentType: 'audio/mp4',
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from('memory-photos')
+        .createSignedUrl(data.path, 60 * 60 * 24 * 365);
+
+      if (signedError) throw signedError;
+
+      // Clean up the temporary audio file
+      await FileSystem.deleteAsync(uri, { idempotent: true });
+
+      return signedData.signedUrl;
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      Alert.alert(
+        'Storage Configuration Required',
+        'Please add "audio/mp4" to allowed MIME types in your Supabase bucket.\n\nGo to Storage → memory-photos → Edit → Allowed MIME types → Add "audio/mp4"'
+      );
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleStartRecording = async () => {
+    try {
+      const rec = await startRecording();
+      setRecording(rec);
+      setIsRecording(true);
+      
+      // Update duration every second
+      const interval = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1000);
+      }, 1000);
+      
+      // Store interval ID to clear it later
+      (rec as any).durationInterval = interval;
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      Alert.alert('Error', 'Failed to start recording. Please check microphone permissions.');
+    }
+  };
+
+  const handleStopRecording = async () => {
+    try {
+      if (!recording) return;
+
+      // Clear the duration interval
+      if ((recording as any).durationInterval) {
+        clearInterval((recording as any).durationInterval);
+      }
+
+      const result = await stopRecording(recording);
+      
+      setNewItem({
+        ...newItem,
+        recordedAudio: result.uri,
+        audioDuration: result.duration,
+      });
+      
+      setIsRecording(false);
+      setRecording(null); // Clear recording reference immediately
+      setRecordingDuration(0);
+    } catch (error) {
+      console.error('Failed to stop recording:', error);
+      setIsRecording(false);
+      setRecording(null); // Clear recording reference even on error
+      setRecordingDuration(0);
+      Alert.alert('Error', 'Failed to stop recording');
+    }
+  };
+
+  const handlePlayAudio = async (uri: string, itemId: string) => {
+    try {
+      // Stop currently playing audio if any
+      if (playingSound) {
+        await playingSound.stopAsync();
+        await playingSound.unloadAsync();
+        if (playingItemId === itemId) {
+          setPlayingSound(null);
+          setPlayingItemId(null);
+          return;
+        }
+      }
+
+      const sound = await playAudio(uri);
+      setPlayingSound(sound);
+      setPlayingItemId(itemId);
+
+      // Auto-stop when finished
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setPlayingSound(null);
+          setPlayingItemId(null);
+        }
+      });
+    } catch (error) {
+      console.error('Failed to play audio:', error);
+      Alert.alert('Error', 'Failed to play audio');
     }
   };
 
@@ -306,8 +492,14 @@ export default function MemoriesScreen() {
         }
         itemData.content = newItem.content.trim();
       } else if (newItem.type === 'audio') {
-        Alert.alert('Coming Soon', 'Audio recording will be available soon!');
-        return;
+        if (!newItem.recordedAudio) {
+          Alert.alert('Error', 'Please record audio');
+          return;
+        }
+        const fileUrl = await uploadAudio(newItem.recordedAudio);
+        if (!fileUrl) return;
+        itemData.file_url = fileUrl;
+        itemData.content = formatDuration(newItem.audioDuration); // Store duration as content
       }
 
       const { error } = await supabase.from('memory_items').insert(itemData);
@@ -321,7 +513,7 @@ export default function MemoriesScreen() {
 
       Alert.alert('Success', 'Item added! ✨');
       setShowAddItemView(false);
-      setNewItem({ type: 'photo', content: '', selectedImage: null });
+      setNewItem({ type: 'photo', content: '', selectedImage: null, recordedAudio: null, audioDuration: 0 });
       loadMemoryItems(selectedMemory.id);
       loadMemories();
     } catch (error) {
@@ -334,7 +526,13 @@ export default function MemoriesScreen() {
     setSelectedMemory(memory);
     loadMemoryItems(memory.id);
     setShowAddItemView(false);
+    setShowImageViewer(false);
     setDetailModalVisible(true);
+  };
+
+  const openImageViewer = (imageUrl: string) => {
+    setViewingImageUrl(imageUrl);
+    setShowImageViewer(true);
   };
 
   const renderMemoryCard = useCallback(
@@ -415,11 +613,35 @@ export default function MemoriesScreen() {
           </View>
 
           {item.type === 'photo' && item.file_url && (
-            <Image source={{ uri: item.file_url }} style={styles.itemImage} />
+            <TouchableOpacity
+              onPress={() => openImageViewer(item.file_url!)}
+              activeOpacity={0.9}
+            >
+              <Image source={{ uri: item.file_url }} style={styles.itemImage} />
+              <View style={styles.imageOverlay}>
+                <Ionicons name="expand-outline" size={20} color="#fff" />
+              </View>
+            </TouchableOpacity>
           )}
 
           {item.type === 'journal' && item.content && (
             <Text style={styles.itemContent}>{item.content}</Text>
+          )}
+
+          {item.type === 'audio' && item.file_url && (
+            <TouchableOpacity
+              style={styles.audioPlayButton}
+              onPress={() => handlePlayAudio(item.file_url!, item.id)}
+            >
+              <Ionicons
+                name={playingItemId === item.id ? 'pause-circle' : 'play-circle'}
+                size={48}
+                color="#8B5CF6"
+              />
+              <Text style={styles.audioDuration}>
+                {item.content || '0:00'}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
       );
@@ -547,49 +769,82 @@ export default function MemoriesScreen() {
               onPress={() => {
                 setDetailModalVisible(false);
                 setShowAddItemView(false);
+                setShowImageViewer(false);
               }}
               style={styles.modalHeaderButton}
             >
               <Ionicons name="close" size={28} color="#1F2937" />
             </TouchableOpacity>
             <Text style={styles.modalTitle} numberOfLines={1}>
-              {showAddItemView ? 'Add Item' : selectedMemory?.title || 'Memory'}
+              {showImageViewer 
+                ? 'Photo' 
+                : showAddItemView 
+                ? 'Add Item' 
+                : selectedMemory?.title || 'Memory'}
             </Text>
-            <TouchableOpacity
-              onPress={() => selectedMemory && deleteMemory(selectedMemory.id)}
-              style={styles.modalHeaderButton}
-            >
-              <Ionicons name="trash-outline" size={24} color="#EF4444" />
-            </TouchableOpacity>
+            {!showAddItemView && !showImageViewer && selectedMemory && (
+              <TouchableOpacity
+                onPress={() => deleteMemory(selectedMemory.id)}
+                style={styles.modalHeaderButton}
+              >
+                <Ionicons name="trash-outline" size={24} color="#EF4444" />
+              </TouchableOpacity>
+            )}
+            {(showAddItemView || showImageViewer) && <View style={styles.modalHeaderButton} />}
           </View>
 
           {selectedMemory && (
-            <KeyboardAvoidingView 
+            <KeyboardAvoidingView
               style={styles.detailContainer}
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
-              {!showAddItemView ? (
+              {showImageViewer ? (
+                // IMAGE VIEWER VIEW
+                <View style={styles.imageViewerContainer}>
+                  <View style={styles.imageViewerHeader}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setShowImageViewer(false);
+                        setViewingImageUrl(null);
+                      }}
+                      style={styles.backToItemsButton}
+                    >
+                      <Ionicons name="arrow-back" size={24} color="#fff" />
+                      <Text style={styles.imageViewerBackText}>Back</Text>
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {viewingImageUrl ? (
+                    <Image
+                      source={{ uri: viewingImageUrl }}
+                      style={styles.fullScreenImage}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <View style={styles.imageViewerContent}>
+                      <ActivityIndicator size="large" color="#fff" />
+                    </View>
+                  )}
+                </View>
+              ) : !showAddItemView ? (
                 // ITEMS LIST VIEW
                 <>
-                  {selectedMemory.description && (
-                    <View style={styles.descriptionContainer}>
+                  <View style={styles.descriptionContainer}>
+                    {selectedMemory.description && (
                       <Text style={styles.detailDescription}>
                         {selectedMemory.description}
                       </Text>
-                    </View>
-                  )}
+                    )}
+                  </View>
 
                   <View style={styles.itemsHeader}>
-                    <Text style={styles.itemsTitle}>
-                      Items ({memoryItems.length})
-                    </Text>
+                    <Text style={styles.itemsTitle}>Items</Text>
                     <TouchableOpacity
                       style={styles.addItemButton}
                       onPress={() => setShowAddItemView(true)}
-                      activeOpacity={0.7}
                     >
-                      <Ionicons name="add-circle" size={24} color="#8B5CF6" />
-                      <Text style={styles.addItemText}>Add Item</Text>
+                      <Ionicons name="add" size={20} color="#8B5CF6" />
+                      <Text style={styles.addItemText}>Add</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -616,9 +871,23 @@ export default function MemoriesScreen() {
                 <ScrollView style={styles.addItemContainer}>
                   <View style={styles.addItemHeader}>
                     <TouchableOpacity
-                      onPress={() => {
+                      onPress={async () => {
+                        // Stop recording if active
+                        if (recording) {
+                          if ((recording as any).durationInterval) {
+                            clearInterval((recording as any).durationInterval);
+                          }
+                          try {
+                            await recording.stopAndUnloadAsync();
+                          } catch (e) {
+                            // Ignore errors if already stopped
+                          }
+                        }
                         setShowAddItemView(false);
-                        setNewItem({ type: 'photo', content: '', selectedImage: null });
+                        setNewItem({ type: 'photo', content: '', selectedImage: null, recordedAudio: null, audioDuration: 0 });
+                        setIsRecording(false);
+                        setRecording(null);
+                        setRecordingDuration(0);
                       }}
                       style={styles.backToItemsButton}
                     >
@@ -644,9 +913,23 @@ export default function MemoriesScreen() {
                           styles.typeButton,
                           newItem.type === 'photo' && styles.typeButtonActive,
                         ]}
-                        onPress={() =>
-                          setNewItem({ ...newItem, type: 'photo', content: '' })
-                        }
+                        onPress={async () => {
+                          // Clean up recording if switching away from audio
+                          if (recording) {
+                            if ((recording as any).durationInterval) {
+                              clearInterval((recording as any).durationInterval);
+                            }
+                            try {
+                              await recording.stopAndUnloadAsync();
+                            } catch (e) {
+                              // Ignore errors
+                            }
+                            setRecording(null);
+                            setIsRecording(false);
+                            setRecordingDuration(0);
+                          }
+                          setNewItem({ ...newItem, type: 'photo', content: '', recordedAudio: null, audioDuration: 0 });
+                        }}
                       >
                         <Ionicons
                           name="image"
@@ -668,9 +951,23 @@ export default function MemoriesScreen() {
                           styles.typeButton,
                           newItem.type === 'journal' && styles.typeButtonActive,
                         ]}
-                        onPress={() =>
-                          setNewItem({ ...newItem, type: 'journal', selectedImage: null })
-                        }
+                        onPress={async () => {
+                          // Clean up recording if switching away from audio
+                          if (recording) {
+                            if ((recording as any).durationInterval) {
+                              clearInterval((recording as any).durationInterval);
+                            }
+                            try {
+                              await recording.stopAndUnloadAsync();
+                            } catch (e) {
+                              // Ignore errors
+                            }
+                            setRecording(null);
+                            setIsRecording(false);
+                            setRecordingDuration(0);
+                          }
+                          setNewItem({ ...newItem, type: 'journal', selectedImage: null, recordedAudio: null, audioDuration: 0 });
+                        }}
                       >
                         <Ionicons
                           name="document-text"
@@ -713,7 +1010,10 @@ export default function MemoriesScreen() {
                     </View>
 
                     {newItem.type === 'photo' && (
-                      <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+                      <TouchableOpacity
+                        style={styles.imagePickerButton}
+                        onPress={pickImage}
+                      >
                         {newItem.selectedImage ? (
                           <Image
                             source={{ uri: newItem.selectedImage }}
@@ -741,11 +1041,51 @@ export default function MemoriesScreen() {
                     )}
 
                     {newItem.type === 'audio' && (
-                      <View style={styles.audioPlaceholder}>
-                        <Ionicons name="mic-outline" size={64} color="#D1D5DB" />
-                        <Text style={styles.audioPlaceholderText}>
-                          Audio recording coming soon!
-                        </Text>
+                      <View style={styles.audioRecordingContainer}>
+                        {!newItem.recordedAudio ? (
+                          <View style={styles.recordingControls}>
+                            <TouchableOpacity
+                              style={[
+                                styles.recordButton,
+                                isRecording && styles.recordButtonActive,
+                              ]}
+                              onPress={isRecording ? handleStopRecording : handleStartRecording}
+                              disabled={uploading}
+                            >
+                              <Ionicons
+                                name={isRecording ? 'stop-circle' : 'mic'}
+                                size={64}
+                                color={isRecording ? '#EF4444' : '#8B5CF6'}
+                              />
+                            </TouchableOpacity>
+                            <Text style={styles.recordingText}>
+                              {isRecording
+                                ? `Recording: ${formatDuration(recordingDuration)}`
+                                : 'Tap to start recording'}
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={styles.recordedAudioPreview}>
+                            <Ionicons name="checkmark-circle" size={48} color="#10B981" />
+                            <Text style={styles.recordedText}>
+                              Audio recorded: {formatDuration(newItem.audioDuration)}
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.deleteRecordingButton}
+                              onPress={() =>
+                                setNewItem({
+                                  ...newItem,
+                                  recordedAudio: null,
+                                  audioDuration: 0,
+                                })
+                              }
+                            >
+                              <Text style={styles.deleteRecordingText}>
+                                Record Again
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
                       </View>
                     )}
                   </View>
@@ -1049,6 +1389,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     resizeMode: 'cover',
   },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    padding: 8,
+  },
   itemContent: {
     fontSize: 15,
     color: '#374151',
@@ -1183,5 +1531,96 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 15,
     color: '#6B7280',
+  },
+  // Audio Recording Styles
+  audioRecordingContainer: {
+    height: 200,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordingControls: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  recordButton: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#F5F3FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#8B5CF6',
+  },
+  recordButtonActive: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#EF4444',
+  },
+  recordingText: {
+    fontSize: 15,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  recordedAudioPreview: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  recordedText: {
+    fontSize: 15,
+    color: '#10B981',
+    fontWeight: '600',
+  },
+  deleteRecordingButton: {
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+  },
+  deleteRecordingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  // Audio Playback Styles
+  audioPlayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    backgroundColor: '#F5F3FF',
+    borderRadius: 12,
+  },
+  audioDuration: {
+    fontSize: 16,
+    color: '#8B5CF6',
+    fontWeight: '600',
+  },
+  // Image Viewer Styles (inside detail modal, not stacked)
+  imageViewerContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  imageViewerHeader: {
+    padding: 20,
+    paddingTop: 12,
+  },
+  imageViewerBackText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '500',
+  },
+  imageViewerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImage: {
+    flex: 1,
+    width: '100%',
   },
 });
