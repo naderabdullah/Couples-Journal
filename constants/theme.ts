@@ -1,41 +1,68 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
-
+// constants/theme.ts
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// Romantic Color Palette
+export const RomanticColors = {
+  // Primary romantic colors
+  rosePink: '#FF6B9D',
+  softPink: '#FFB3D9',
+  lavender: '#C9A0DC',
+  violet: '#8B5CF6',
+  deepPurple: '#7C3AED',
+  
+  // Accent colors
+  peach: '#FFB5A7',
+  coral: '#FF8E8E',
+  blush: '#FFC9E5',
+  
+  // Neutral romantic tones
+  cream: '#FFF8F3',
+  warmWhite: '#FFFBF7',
+  softGray: '#F5F0F6',
+  dustyRose: '#D4A5A5',
+  
+  // Gradients (for LinearGradient) - ADD 'as const' to each
+  sunsetGradient: ['#FF6B9D', '#C9A0DC'] as const,
+  twilightGradient: ['#8B5CF6', '#EC4899'] as const,
+  dreamyGradient: ['#FFB3D9', '#C9A0DC', '#8B5CF6'] as const,
+  warmGradient: ['#FFB5A7', '#FF6B9D'] as const,
+};
+
+const tintColorLight = '#FF6B9D';
+const tintColorDark = '#C9A0DC';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
+    text: '#1F2937',
+    background: '#FFFBF7',
     tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
+    icon: '#9CA3AF',
+    tabIconDefault: '#D4A5A5',
     tabIconSelected: tintColorLight,
+    cardBackground: '#FFFFFF',
+    border: '#FFE4F1',
+    accent: '#FF6B9D',
+    secondary: '#C9A0DC',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
+    text: '#F9FAFB',
+    background: '#1A1625',
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: '#D1D5DB',
+    tabIconDefault: '#9CA3AF',
     tabIconSelected: tintColorDark,
+    cardBackground: '#2D2438',
+    border: '#3F2E4A',
+    accent: '#C9A0DC',
+    secondary: '#8B5CF6',
   },
 };
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
   },
   default: {

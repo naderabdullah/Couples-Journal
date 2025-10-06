@@ -76,6 +76,7 @@ export interface MemoryItem {
   type: 'photo' | 'journal' | 'audio';
   content?: string;
   file_url?: string;
+  caption?: string;
   created_at: string;
 }
 

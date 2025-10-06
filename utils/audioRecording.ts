@@ -89,6 +89,14 @@ export const formatDuration = (milliseconds: number): string => {
 
 export const playAudio = async (uri: string): Promise<Audio.Sound> => {
   try {
+    // Set audio mode to allow playback even in silent mode
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    });
+
     const { sound } = await Audio.Sound.createAsync(
       { uri },
       { shouldPlay: true }

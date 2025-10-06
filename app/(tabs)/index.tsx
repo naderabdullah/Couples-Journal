@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { supabase } from '../../lib/supabase';
 
 interface NavTile {
@@ -19,13 +20,14 @@ interface NavTile {
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
-  color: string;
+  colorKey: 'nav1' | 'nav2' | 'nav3' | 'nav4';
   route: string;
 }
 
 export default function HomeScreen() {
   const router = useRouter();
   const { profile, user } = useAuth();
+  const { theme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState('');
   const [stats, setStats] = useState({
@@ -40,7 +42,7 @@ export default function HomeScreen() {
       title: 'Journal',
       subtitle: 'Write your thoughts',
       icon: 'book',
-      color: '#EC4899',
+      colorKey: 'nav1',
       route: '/(tabs)/journal',
     },
     {
@@ -48,7 +50,7 @@ export default function HomeScreen() {
       title: 'Connect',
       subtitle: 'Share gratitude & answer questions',
       icon: 'heart',
-      color: '#EF4444',
+      colorKey: 'nav2',
       route: '/(tabs)/connect',
     },
     {
@@ -56,7 +58,7 @@ export default function HomeScreen() {
       title: 'Memories',
       subtitle: 'Capture special moments',
       icon: 'images',
-      color: '#8B5CF6',
+      colorKey: 'nav3',
       route: '/(tabs)/memories',
     },
     {
@@ -64,7 +66,7 @@ export default function HomeScreen() {
       title: 'Profile',
       subtitle: 'Settings & preferences',
       icon: 'person-circle',
-      color: '#3B82F6',
+      colorKey: 'nav4',
       route: '/(tabs)/profile',
     },
   ];
@@ -132,11 +134,13 @@ export default function HomeScreen() {
     router.push(route as any);
   };
 
+  const styles = createStyles(theme);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#EC4899" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       </SafeAreaView>
     );
@@ -170,17 +174,17 @@ export default function HomeScreen() {
         {profile?.couple_id && (
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
-              <Ionicons name="calendar" size={24} color="#EC4899" />
+              <Ionicons name="calendar" size={24} color={theme.colors.primary} />
               <Text style={styles.statNumber}>{stats.daysTogether}</Text>
               <Text style={styles.statLabel}>Days Together</Text>
             </View>
             <View style={styles.statCard}>
-              <Ionicons name="book" size={24} color="#8B5CF6" />
+              <Ionicons name="book" size={24} color={theme.colors.secondary} />
               <Text style={styles.statNumber}>{stats.entriesCount}</Text>
               <Text style={styles.statLabel}>Entries</Text>
             </View>
             <View style={styles.statCard}>
-              <Ionicons name="images" size={24} color="#3B82F6" />
+              <Ionicons name="images" size={24} color={theme.colors.accent} />
               <Text style={styles.statNumber}>{stats.memoriesCount}</Text>
               <Text style={styles.statLabel}>Memories</Text>
             </View>
@@ -190,33 +194,36 @@ export default function HomeScreen() {
         {/* Navigation Tiles */}
         <View style={styles.tilesContainer}>
           <Text style={styles.sectionTitle}>What would you like to do?</Text>
-          {navTiles.map((tile) => (
-            <TouchableOpacity
-              key={tile.id}
-              style={[styles.tile, { borderLeftColor: tile.color }]}
-              onPress={() => handleTilePress(tile.route)}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.iconContainer, { backgroundColor: tile.color + '15' }]}>
-                <Ionicons name={tile.icon} size={32} color={tile.color} />
-              </View>
-              <View style={styles.tileContent}>
-                <Text style={styles.tileTitle}>{tile.title}</Text>
-                <Text style={styles.tileSubtitle}>{tile.subtitle}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
-            </TouchableOpacity>
-          ))}
+          {navTiles.map((tile) => {
+            const tileColor = theme.colors[tile.colorKey];
+            return (
+              <TouchableOpacity
+                key={tile.id}
+                style={[styles.tile, { borderLeftColor: tileColor }]}
+                onPress={() => handleTilePress(tile.route)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.iconContainer, { backgroundColor: tileColor + '15' }]}>
+                  <Ionicons name={tile.icon} size={32} color={tileColor} />
+                </View>
+                <View style={styles.tileContent}>
+                  <Text style={styles.tileTitle}>{tile.title}</Text>
+                  <Text style={styles.tileSubtitle}>{tile.subtitle}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color={theme.colors.textLight} />
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.background,
   },
   loadingContainer: {
     flex: 1,
@@ -230,48 +237,50 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 24,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.cardBackground,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: theme.colors.border,
   },
   greeting: {
     fontSize: 16,
-    color: '#6B7280',
+    color: theme.colors.textLight,
     marginBottom: 4,
   },
   userName: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: theme.colors.primary,
   },
   statsContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 20,
-    justifyContent: 'space-between',  // ADD THIS
+    justifyContent: 'space-between',
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 2,
-    marginHorizontal: 6,  // ADD THIS (12/2 = 6 on each side)
+    marginHorizontal: 6,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: theme.colors.text,
     marginTop: 8,
   },
   statLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: theme.colors.textLight,
     marginTop: 4,
     textAlign: 'center',
   },
@@ -282,20 +291,20 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: theme.colors.text,
     marginBottom: 16,
   },
   tile: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.cardBackground,
     borderRadius: 16,
     padding: 20,
     marginBottom: 12,
     borderLeftWidth: 4,
-    shadowColor: '#000',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -313,11 +322,11 @@ const styles = StyleSheet.create({
   tileTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: theme.colors.text,
     marginBottom: 4,
   },
   tileSubtitle: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.colors.textSecondary,
   },
 });

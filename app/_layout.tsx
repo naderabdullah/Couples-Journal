@@ -4,13 +4,16 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 
 // Loading screen
 function LoadingScreen() {
+  const { theme } = useTheme();
+  
   return (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#EC4899" />
-      <Text style={styles.loadingText}>Loading...</Text>
+    <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+      <ActivityIndicator size="large" color={theme.colors.primary} />
+      <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading...</Text>
     </View>
   );
 }
@@ -75,10 +78,12 @@ const debugLog = (message: string, data?: any) => {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <StatusBar style="dark" />
-      <RootLayoutNav />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <StatusBar style="dark" />
+        <RootLayoutNav />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
@@ -87,11 +92,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#718096',
   },
 });

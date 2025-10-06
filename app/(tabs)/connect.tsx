@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { supabase } from '../../lib/supabase';
 
 interface Question {
@@ -41,6 +42,7 @@ interface GratitudeEntry {
 
 export default function ConnectScreen() {
   const { profile, user } = useAuth();
+  const { theme } = useTheme();
   const [todayQuestion, setTodayQuestion] = useState<Question | null>(null);
   const [myResponse, setMyResponse] = useState<QuestionResponse | null>(null);
   const [partnerResponse, setPartnerResponse] = useState<QuestionResponse | null>(null);
@@ -61,17 +63,14 @@ export default function ConnectScreen() {
       setLoading(true);
       if (!user || !profile?.couple_id || !profile?.partner_id) return;
 
-      // Get today's question
       const today = format(new Date(), 'yyyy-MM-dd');
       
-      // First check if there's a daily question for today
       let { data: dailyQuestion } = await supabase
         .from('daily_questions')
         .select('*')
         .eq('date', today)
         .single();
 
-      // If no daily question, get a random question from the questions table
       if (!dailyQuestion) {
         const { data: randomQuestion } = await supabase
           .from('questions')
@@ -86,7 +85,6 @@ export default function ConnectScreen() {
         setTodayQuestion(dailyQuestion);
       }
 
-      // Get today's responses
       if (dailyQuestion || todayQuestion) {
         const questionId = dailyQuestion?.id || todayQuestion?.id;
         
@@ -110,7 +108,6 @@ export default function ConnectScreen() {
         }
       }
 
-      // Get recent gratitudes
       const { data: gratitudes } = await supabase
         .from('gratitude_entries')
         .select('*')
@@ -186,10 +183,12 @@ export default function ConnectScreen() {
     }
   };
 
+  const styles = createStyles(theme);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#EC4899" style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 50 }} />
       </SafeAreaView>
     );
   }
@@ -203,7 +202,7 @@ export default function ConnectScreen() {
               onPress={() => router.push('/(tabs)')}
               style={styles.backButton}
             >
-              <Ionicons name="arrow-back" size={24} color="#1F2937" />
+              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
             </TouchableOpacity>
             
             <View style={styles.headerCenter}>
@@ -219,7 +218,7 @@ export default function ConnectScreen() {
         {/* Question of the Day Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <MaterialCommunityIcons name="comment-question" size={24} color="#EC4899" />
+            <MaterialCommunityIcons name="comment-question" size={24} color={theme.colors.primary} />
             <Text style={styles.sectionTitle}>Question of the Day</Text>
           </View>
 
@@ -236,6 +235,7 @@ export default function ConnectScreen() {
                     numberOfLines={3}
                     value={questionAnswer}
                     onChangeText={setQuestionAnswer}
+                    placeholderTextColor={theme.colors.textLight}
                   />
                   <TouchableOpacity
                     style={styles.submitButton}
@@ -263,7 +263,7 @@ export default function ConnectScreen() {
                     </View>
                   ) : (
                     <View style={[styles.responseCard, styles.waitingCard]}>
-                      <Ionicons name="time-outline" size={24} color="#999" />
+                      <Ionicons name="time-outline" size={24} color={theme.colors.textLight} />
                       <Text style={styles.waitingText}>
                         Waiting for your partner's response...
                       </Text>
@@ -284,7 +284,7 @@ export default function ConnectScreen() {
         {/* Gratitude Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="heart" size={24} color="#EC4899" />
+            <Ionicons name="heart" size={24} color={theme.colors.primary} />
             <Text style={styles.sectionTitle}>Express Gratitude</Text>
           </View>
 
@@ -296,6 +296,7 @@ export default function ConnectScreen() {
               numberOfLines={3}
               value={gratitudeText}
               onChangeText={setGratitudeText}
+              placeholderTextColor={theme.colors.textLight}
             />
             <TouchableOpacity
               style={styles.gratitudeButton}
@@ -322,7 +323,7 @@ export default function ConnectScreen() {
                   <Ionicons 
                     name={gratitude.from_user_id === user?.id ? "arrow-forward" : "arrow-back"} 
                     size={16} 
-                    color="#EC4899" 
+                    color={theme.colors.primary} 
                   />
                   <Text style={styles.gratitudeItemText}>
                     {gratitude.content}
@@ -337,15 +338,15 @@ export default function ConnectScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.background,
   },
   headerContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.cardBackground,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: theme.colors.border,
   },
   header: {
     flexDirection: 'row',
@@ -367,14 +368,14 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: theme.colors.primary,
   },
   headerRight: {
     width: 40,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.colors.textLight,
     textAlign: 'center',
     paddingHorizontal: 20,
     paddingBottom: 10,
@@ -390,33 +391,37 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
-    marginLeft: 8,  // CHANGED from gap: 8
+    color: theme.colors.text,
+    marginLeft: 8,
   },
   questionCard: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: theme.colors.cardBackground,
     borderRadius: 16,
     padding: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   questionText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#333',
+    color: theme.colors.text,
     marginBottom: 16,
     lineHeight: 24,
   },
   answerInput: {
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: theme.colors.border,
     borderRadius: 12,
     padding: 12,
     fontSize: 14,
     lineHeight: 20,
     minHeight: 80,
     textAlignVertical: 'top',
+    backgroundColor: theme.colors.inputBackground,
+    color: theme.colors.text,
   },
   submitButton: {
-    backgroundColor: '#EC4899',
+    backgroundColor: theme.colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -428,81 +433,87 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   responsesContainer: {
-    // REMOVED gap: 12
   },
   responseCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.inputBackground,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#f0f0f0',
-    marginBottom: 12,  // ADDED instead of gap
+    borderColor: theme.colors.border,
+    marginBottom: 12,
   },
   partnerResponseCard: {
-    backgroundColor: '#fef2f8',
-    borderColor: '#fce7f3',
+    backgroundColor: theme.colors.borderLight,
+    borderColor: theme.colors.accent,
   },
   responseLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#EC4899',
+    color: theme.colors.primary,
     marginBottom: 8,
     textTransform: 'uppercase',
   },
   responseText: {
     fontSize: 14,
-    color: '#333',
+    color: theme.colors.text,
     lineHeight: 20,
   },
   waitingCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: theme.colors.inputBackground,
   },
   waitingText: {
     fontSize: 14,
-    color: '#999',
-    marginLeft: 12,  // CHANGED from gap: 12
+    color: theme.colors.textLight,
+    marginLeft: 12,
   },
   noQuestionCard: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: theme.colors.cardBackground,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   noQuestionText: {
     fontSize: 14,
-    color: '#666',
+    color: theme.colors.textSecondary,
     textAlign: 'center',
   },
   gratitudeCard: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: theme.colors.cardBackground,
     borderRadius: 16,
     padding: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   gratitudeInput: {
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: theme.colors.border,
     borderRadius: 12,
     padding: 12,
     fontSize: 14,
     lineHeight: 20,
     minHeight: 80,
     textAlignVertical: 'top',
+    backgroundColor: theme.colors.inputBackground,
+    color: theme.colors.text,
   },
   gratitudeButton: {
-    backgroundColor: '#EC4899',
+    backgroundColor: theme.colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 12,
+    gap: 8,
   },
   gratitudeButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    marginLeft: 8,  // CHANGED from gap: 8
   },
   recentGratitudes: {
     marginTop: 20,
@@ -510,7 +521,7 @@ const styles = StyleSheet.create({
   recentTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: theme.colors.textSecondary,
     marginBottom: 12,
   },
   gratitudeItem: {
@@ -518,13 +529,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: theme.colors.border,
   },
   gratitudeItemText: {
     flex: 1,
     fontSize: 14,
-    color: '#333',
+    color: theme.colors.text,
     lineHeight: 20,
-    marginLeft: 8,  // CHANGED from gap: 8
+    marginLeft: 8,
   },
 });

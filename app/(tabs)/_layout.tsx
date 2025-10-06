@@ -6,10 +6,10 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#EC4899',
+        tabBarActiveTintColor: '#8B5CF6',
         tabBarInactiveTintColor: '#9CA3AF',
         headerShown: false,
-        tabBarStyle: { display: 'none' }, // Hide the tab bar
+        tabBarStyle: { display: 'none' },
       }}
     >
       <Tabs.Screen
@@ -37,7 +37,7 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="heart" size={size || 24} color={color} />
           ),
-          href: null, // Hide if no partner
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -61,7 +61,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="explore"
         options={{
-          href: null, // Hide this tab
+          href: null,
         }}
       />
     </Tabs>
