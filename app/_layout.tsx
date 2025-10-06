@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 
@@ -20,9 +21,12 @@ function LoadingScreen() {
 
 // Main navigation logic
 function RootLayoutNav() {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { loading: themeLoading, themeName } = useTheme();
   const segments = useSegments();
   const router = useRouter();
+
+  const loading = authLoading || themeLoading;
 
   useEffect(() => {
     if (loading) return; // Still loading, don't navigate
@@ -52,21 +56,27 @@ function RootLayoutNav() {
     return <LoadingScreen />;
   }
 
+  // StatusBar style based on theme
+  const statusBarStyle = themeName === 'dark' ? 'light' : 'dark';
+
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen 
-        name="(auth)" 
-        options={{ 
-          headerShown: false,
-        }} 
-      />
-      <Stack.Screen 
-        name="(tabs)" 
-        options={{ 
-          headerShown: false,
-        }} 
-      />
-    </Stack>
+    <>
+      <StatusBar style={statusBarStyle} />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen 
+          name="(auth)" 
+          options={{ 
+            headerShown: false,
+          }} 
+        />
+        <Stack.Screen 
+          name="(tabs)" 
+          options={{ 
+            headerShown: false,
+          }} 
+        />
+      </Stack>
+    </>
   );
 }
 
@@ -78,12 +88,14 @@ const debugLog = (message: string, data?: any) => {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <StatusBar style="dark" />
-        <RootLayoutNav />
-      </AuthProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <AuthProvider>
+          <StatusBar style="dark" />
+          <RootLayoutNav />
+        </AuthProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 

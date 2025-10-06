@@ -1,5 +1,6 @@
 // app/(tabs)/memories.tsx
 import { Ionicons } from '@expo/vector-icons';
+import { ZoomableImage } from 'components/ZoomableImage';
 import { format } from 'date-fns';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -824,7 +825,16 @@ export default function MemoriesScreen() {
               {/* Rest of your modal content... */}
               {showImageViewer ? (
                 <View style={styles.imageViewerContainer}>
-                  <View style={styles.imageViewerHeader}>
+                  {viewingImageUrl ? (
+                    <ZoomableImage uri={viewingImageUrl} />
+                  ) : (
+                    <View style={styles.imageViewerContent}>
+                      <ActivityIndicator size="large" color="#fff" />
+                    </View>
+                  )}
+                  
+                  {/* Header rendered on top with absolute positioning */}
+                  <View style={styles.imageViewerHeaderAbsolute}>
                     <TouchableOpacity
                       onPress={() => {
                         setShowImageViewer(false);
@@ -836,18 +846,6 @@ export default function MemoriesScreen() {
                       <Text style={styles.imageViewerBackText}>Back</Text>
                     </TouchableOpacity>
                   </View>
-                  
-                  {viewingImageUrl ? (
-                    <Image
-                      source={{ uri: viewingImageUrl }}
-                      style={styles.fullScreenImage}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <View style={styles.imageViewerContent}>
-                      <ActivityIndicator size="large" color="#fff" />
-                    </View>
-                  )}
                 </View>
               ) : !showAddItemView ? (
                 <>
@@ -1503,6 +1501,11 @@ const createStyles = (theme: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
   },
   backToItemsText: {
     fontSize: 16,
@@ -1673,6 +1676,16 @@ const createStyles = (theme: any) => StyleSheet.create({
   imageViewerHeader: {
     padding: 20,
     paddingTop: 12,
+  },
+  imageViewerHeaderAbsolute: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    paddingTop: 80,
+    zIndex: 1000,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   imageViewerBackText: {
     fontSize: 16,
