@@ -104,3 +104,14 @@ export interface Event {
   created_at: string;
   updated_at: string;
 }
+
+export interface CoupleInviteCode {
+  id: string;
+  code: string;
+  created_by: string;
+  created_at: string;
+  expires_at: string;
+  is_used: boolean;
+  used_by?: string;
+  used_at?: string;
+}

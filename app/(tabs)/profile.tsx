@@ -1,9 +1,11 @@
 // app/(tabs)/profile.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  Clipboard,
   Modal,
   ScrollView,
   StyleSheet,
@@ -19,10 +21,39 @@ import { useTheme } from '../../contexts/ThemeContext';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profile, signOut, sendPartnerInvite } = useAuth();
+  const { profile, signOut, generateInviteCode, acceptInviteCode, getCurrentInviteCode } = useAuth();
   const { theme } = useTheme();
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
-  const [partnerEmail, setPartnerEmail] = useState('');
+  
+  // Code-based invite system state
+  const [inviteMode, setInviteMode] = useState<'choose' | 'generate' | 'accept'>('choose');
+  const [inviteCode, setInviteCode] = useState('');
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [codeExpiry, setCodeExpiry] = useState<Date | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState('');
+  const [loadingCode, setLoadingCode] = useState(false);
+
+  // Countdown timer for code expiry
+  useEffect(() => {
+    if (!codeExpiry) return;
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const diff = codeExpiry.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setTimeRemaining('Expired');
+        setGeneratedCode('');
+        setCodeExpiry(null);
+      } else {
+        const minutes = Math.floor(diff / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        setTimeRemaining(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [codeExpiry]);
 
   const handleSignOut = async () => {
     Alert.alert(
@@ -43,21 +74,85 @@ export default function ProfileScreen() {
     );
   };
 
-  const handleInvitePartner = async () => {
-    if (!partnerEmail.trim()) {
-      Alert.alert('Error', 'Please enter your partner\'s email');
-      return;
+  const loadExistingCode = async () => {
+    const { code } = await getCurrentInviteCode();
+    if (code) {
+      setGeneratedCode(code.code);
+      setCodeExpiry(new Date(code.expires_at));
+      setInviteMode('generate');
     }
+  };
 
-    const result = await sendPartnerInvite(partnerEmail.trim());
-    
-    if (result.error) {
-      Alert.alert('Error', result.error.message || 'Failed to send invite');
-    } else {
-      Alert.alert('Success', 'Partner invite sent!');
-      setInviteModalVisible(false);
-      setPartnerEmail('');
+  const openInviteModal = async () => {
+    setInviteModalVisible(true);
+    setInviteMode('choose');
+    setInviteCode('');
+    setGeneratedCode('');
+    setCodeExpiry(null);
+    await loadExistingCode();
+  };
+
+  const closeInviteModal = () => {
+    setInviteModalVisible(false);
+    setInviteMode('choose');
+    setInviteCode('');
+    setGeneratedCode('');
+    setCodeExpiry(null);
+  };
+
+  const handleGenerateCode = async () => {
+    try {
+      setLoadingCode(true);
+      const { code, error } = await generateInviteCode();
+
+      if (error) {
+        Alert.alert('Error', error.message || 'Failed to generate code');
+        return;
+      }
+
+      if (code) {
+        setGeneratedCode(code);
+        const expiry = new Date();
+        expiry.setHours(expiry.getHours() + 1);
+        setCodeExpiry(expiry);
+        setInviteMode('generate');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setLoadingCode(false);
     }
+  };
+
+  const handleAcceptCode = async () => {
+    try {
+      if (!inviteCode.trim() || inviteCode.trim().length !== 6) {
+        Alert.alert('Error', 'Please enter a valid 6-character code');
+        return;
+      }
+
+      setLoadingCode(true);
+      const { success, error } = await acceptInviteCode(inviteCode);
+
+      if (error) {
+        Alert.alert('Error', error.message || 'Failed to accept invite');
+        return;
+      }
+
+      if (success) {
+        Alert.alert('Success! 💕', 'You are now connected with your partner!');
+        closeInviteModal();
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setLoadingCode(false);
+    }
+  };
+
+  const copyCodeToClipboard = () => {
+    Clipboard.setString(generatedCode);
+    Alert.alert('Copied!', 'Code copied to clipboard');
   };
 
   const styles = createStyles(theme);
@@ -110,7 +205,7 @@ export default function ProfileScreen() {
               </Text>
               <TouchableOpacity
                 style={styles.inviteButton}
-                onPress={() => setInviteModalVisible(true)}
+                onPress={openInviteModal}
               >
                 <Ionicons name="person-add" size={20} color="#fff" />
                 <Text style={styles.inviteButtonText}>Invite Partner</Text>
@@ -166,41 +261,210 @@ export default function ProfileScreen() {
       {/* Invite Partner Modal */}
       <Modal
         animationType="slide"
-        transparent={true}
+        transparent={false}
         visible={inviteModalVisible}
-        onRequestClose={() => setInviteModalVisible(false)}
+        onRequestClose={closeInviteModal}
       >
-        <View style={styles.modalOverlay}>
+        <SafeAreaView style={styles.modalFullScreen} edges={['top', 'bottom']}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Invite Your Partner</Text>
-              <TouchableOpacity onPress={() => setInviteModalVisible(false)}>
-                <Ionicons name="close" size={24} color={theme.colors.text} />
-              </TouchableOpacity>
-            </View>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {inviteMode === 'choose' ? 'Connect with Partner' : 
+                   inviteMode === 'generate' ? 'Share Your Code' : 'Enter Code'}
+                </Text>
+                <TouchableOpacity onPress={closeInviteModal}>
+                  <Ionicons name="close" size={24} color={theme.colors.text} />
+                </TouchableOpacity>
+              </View>
 
-            <Text style={styles.modalDescription}>
-              Enter your partner's email address to send them an invitation to connect
-            </Text>
+              <ScrollView 
+                showsVerticalScrollIndicator={false} 
+                contentContainerStyle={styles.modalScrollContent}
+              >
+              {inviteMode === 'choose' && (
+                <View style={styles.inviteChooseContainer}>
+                  <Text style={styles.modalDescription}>
+                    Choose how you'd like to connect with your partner
+                  </Text>
 
-            <TextInput
-              style={styles.emailInput}
-              placeholder="Partner's email"
-              value={partnerEmail}
-              onChangeText={setPartnerEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              placeholderTextColor={theme.colors.textLight}
-            />
+                  <TouchableOpacity
+                    style={styles.inviteOptionCard}
+                    onPress={() => {
+                      setInviteMode('generate');
+                      if (!generatedCode) {
+                        handleGenerateCode();
+                      }
+                    }}
+                  >
+                    <View style={styles.inviteOptionIcon}>
+                      <Ionicons name="qr-code" size={32} color={theme.colors.primary} />
+                    </View>
+                    <View style={styles.inviteOptionContent}>
+                      <Text style={styles.inviteOptionTitle}>Generate Code</Text>
+                      <Text style={styles.inviteOptionDesc}>
+                        Create a code to share with your partner
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textLight} />
+                  </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.sendInviteButton}
-              onPress={handleInvitePartner}
-            >
-              <Text style={styles.sendInviteButtonText}>Send Invite</Text>
-            </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.inviteOptionCard}
+                    onPress={() => setInviteMode('accept')}
+                  >
+                    <View style={styles.inviteOptionIcon}>
+                      <Ionicons name="key" size={32} color={theme.colors.secondary} />
+                    </View>
+                    <View style={styles.inviteOptionContent}>
+                      <Text style={styles.inviteOptionTitle}>Enter Code</Text>
+                      <Text style={styles.inviteOptionDesc}>
+                        Have a code from your partner? Enter it here
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={theme.colors.textLight} />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {inviteMode === 'generate' && (
+                <View style={styles.inviteGenerateContainer}>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setInviteMode('choose');
+                      setGeneratedCode('');
+                      setCodeExpiry(null);
+                    }}
+                    style={styles.backButtonInline}
+                  >
+                    <Ionicons name="arrow-back" size={20} color={theme.colors.textSecondary} />
+                    <Text style={styles.backButtonText}>Back</Text>
+                  </TouchableOpacity>
+
+                  {!generatedCode ? (
+                    <>
+                      <Text style={styles.modalDescription}>
+                        Generate a temporary code that your partner can use to connect with you. The code expires in 1 hour.
+                      </Text>
+
+                      <TouchableOpacity
+                        style={styles.generateCodeButton}
+                        onPress={handleGenerateCode}
+                        disabled={loadingCode}
+                      >
+                        {loadingCode ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons name="add-circle" size={20} color="#fff" />
+                            <Text style={styles.generateCodeButtonText}>Generate Code</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.codeDisplayCard}>
+                        <Text style={styles.codeLabel}>Your Connection Code</Text>
+                        <View style={styles.codeBox}>
+                          <Text style={styles.codeText}>{generatedCode}</Text>
+                        </View>
+                        <View style={styles.codeExpiry}>
+                          <Ionicons name="time-outline" size={16} color="#F59E0B" />
+                          <Text style={styles.codeExpiryText}>
+                            {timeRemaining === 'Expired' ? 'Expired' : `Expires in ${timeRemaining}`}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.copyCodeButton}
+                        onPress={copyCodeToClipboard}
+                      >
+                        <Ionicons name="copy-outline" size={20} color={theme.colors.primary} />
+                        <Text style={styles.copyCodeButtonText}>Copy Code</Text>
+                      </TouchableOpacity>
+
+                      <View style={styles.codeInstructions}>
+                        <Text style={styles.codeInstructionsTitle}>How to use:</Text>
+                        <Text style={styles.codeInstructionsText}>
+                          1. Share this code with your partner{'\n'}
+                          2. They can enter it in their app{'\n'}
+                          3. You'll be connected automatically! 💕
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.regenerateButton}
+                        onPress={handleGenerateCode}
+                        disabled={loadingCode}
+                      >
+                        {loadingCode ? (
+                          <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                        ) : (
+                          <>
+                            <Ionicons name="refresh" size={18} color={theme.colors.textSecondary} />
+                            <Text style={styles.regenerateButtonText}>Generate New Code</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              )}
+
+              {inviteMode === 'accept' && (
+                <View style={styles.inviteAcceptContainer}>
+                  <TouchableOpacity 
+                    onPress={() => setInviteMode('choose')}
+                    style={styles.backButtonInline}
+                  >
+                    <Ionicons name="arrow-back" size={20} color={theme.colors.textSecondary} />
+                    <Text style={styles.backButtonText}>Back</Text>
+                  </TouchableOpacity>
+
+                  <Text style={styles.modalDescription}>
+                    Enter the 6-character code your partner shared with you
+                  </Text>
+
+                  <View style={styles.codeInputContainer}>
+                    <Text style={styles.codeInputLabel}>Connection Code</Text>
+                    <TextInput
+                      style={styles.codeInput}
+                      placeholder="XXXXXX"
+                      value={inviteCode}
+                      onChangeText={(text) => setInviteCode(text.toUpperCase())}
+                      maxLength={6}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      placeholderTextColor={theme.colors.textLight}
+                    />
+                    <Text style={styles.codeInputHelper}>
+                      The code is case-insensitive and expires after 1 hour
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.acceptCodeButton,
+                      (loadingCode || inviteCode.trim().length !== 6) && styles.acceptCodeButtonDisabled
+                    ]}
+                    onPress={handleAcceptCode}
+                    disabled={loadingCode || inviteCode.trim().length !== 6}
+                  >
+                    {loadingCode ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="link" size={20} color="#fff" />
+                        <Text style={styles.acceptCodeButtonText}>Connect</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -338,52 +602,232 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  modalOverlay: {
+  modalFullScreen: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: theme.colors.background,
   },
   modalContent: {
+    flex: 1,
     backgroundColor: theme.colors.cardBackground,
-    borderRadius: 20,
-    padding: 20,
-    width: '90%',
-    maxWidth: 400,
+    paddingTop: 20,
+    paddingHorizontal: 20,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+    paddingTop: 10,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: theme.colors.text,
+    flex: 1,
+  },
+  modalScrollContent: {
+    paddingBottom: 40,
+    flexGrow: 1,
   },
   modalDescription: {
     fontSize: 14,
     color: theme.colors.textSecondary,
     marginBottom: 20,
+    lineHeight: 20,
   },
-  emailInput: {
+  inviteChooseContainer: {
+    gap: 12,
+  },
+  inviteOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.inputBackground,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  inviteOptionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  inviteOptionContent: {
+    flex: 1,
+  },
+  inviteOptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: 2,
+  },
+  inviteOptionDesc: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+  },
+  inviteGenerateContainer: {
+    gap: 16,
+  },
+  inviteAcceptContainer: {
+    gap: 16,
+  },
+  backButtonInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+  },
+  backButtonText: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+  },
+  generateCodeButton: {
+    backgroundColor: theme.colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  generateCodeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  codeDisplayCard: {
+    backgroundColor: theme.colors.inputBackground,
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  codeLabel: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  codeBox: {
+    backgroundColor: theme.colors.cardBackground,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    borderStyle: 'dashed',
+  },
+  codeText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: theme.colors.primary,
+    letterSpacing: 4,
+  },
+  codeExpiry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  codeExpiryText: {
+    fontSize: 12,
+    color: '#F59E0B',
+    fontWeight: '500',
+  },
+  copyCodeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.cardBackground,
+  },
+  copyCodeButtonText: {
+    fontSize: 15,
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  codeInstructions: {
+    backgroundColor: theme.colors.inputBackground,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  codeInstructionsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  codeInstructionsText: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
+  },
+  regenerateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: theme.colors.inputBackground,
+  },
+  regenerateButtonText: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
+  },
+  codeInputContainer: {
+    gap: 8,
+  },
+  codeInputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+  codeInput: {
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 12,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 20,
+    padding: 16,
+    fontSize: 24,
     backgroundColor: theme.colors.inputBackground,
     color: theme.colors.text,
+    textAlign: 'center',
+    letterSpacing: 4,
+    fontWeight: 'bold',
   },
-  sendInviteButton: {
+  codeInputHelper: {
+    fontSize: 12,
+    color: theme.colors.textLight,
+  },
+  acceptCodeButton: {
     backgroundColor: theme.colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
   },
-  sendInviteButtonText: {
+  acceptCodeButtonDisabled: {
+    opacity: 0.5,
+  },
+  acceptCodeButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
