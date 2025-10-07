@@ -22,11 +22,11 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="journal"
+        name="calendar"
         options={{
-          title: 'Journal',
+          title: 'Calendar',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="book" size={size || 24} color={color} />
+            <Ionicons name="calendar" size={size || 24} color={color} />
           ),
         }}
       />

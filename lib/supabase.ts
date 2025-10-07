@@ -90,3 +90,17 @@ export interface Milestone {
   created_by: string;
   created_at: string;
 }
+
+export interface Event {
+  id: string;
+  couple_id?: string | null;
+  created_by: string;
+  title: string;
+  description?: string;
+  event_date: string;
+  event_time?: string;
+  category?: 'anniversary' | 'date' | 'appointment' | 'reminder' | 'milestone' | 'other';
+  is_all_day: boolean;
+  created_at: string;
+  updated_at: string;
+}

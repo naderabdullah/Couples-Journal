@@ -38,12 +38,12 @@ export default function HomeScreen() {
 
   const navTiles: NavTile[] = [
     {
-      id: 'journal',
-      title: 'Journal',
-      subtitle: 'Write your thoughts',
-      icon: 'book',
+      id: 'calendar',
+      title: 'Calendar',
+      subtitle: 'Plan events & dates',
+      icon: 'calendar',
       colorKey: 'nav1',
-      route: '/(tabs)/journal',
+      route: '/(tabs)/calendar',
     },
     {
       id: 'connect',
