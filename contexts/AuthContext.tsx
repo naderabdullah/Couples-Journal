@@ -23,13 +23,14 @@ interface AuthContextType {
   generateInviteCode: () => Promise<{ code?: string; error?: any }>;
   acceptInviteCode: (code: string) => Promise<{ success: boolean; error?: any }>;
   getCurrentInviteCode: () => Promise<{ code?: InviteCode; error?: any }>;
+  refreshProfile: () => Promise<void>; // NEW: Manual refresh
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Helper function to generate a random 6-character code
 const generateRandomCode = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude similar looking chars
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
   for (let i = 0; i < 6; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -43,56 +44,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth event:', event);
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setProfile(null);
-      }
-    });
-
-    // Subscribe to profile changes in real-time
-    const profileSubscription = supabase
-      .channel('profile_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${user?.id}`,
-        },
-        (payload) => {
-          console.log('Profile updated:', payload);
-          if (user) {
-            fetchProfile(user.id);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      authSubscription.unsubscribe();
-      profileSubscription.unsubscribe();
-    };
-  }, [user?.id]);
-
+  // Fetch profile function (now stable reference)
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for user:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -109,16 +64,102 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               email: user.email!,
               display_name: user.email?.split('@')[0] || 'User',
             });
+            // Retry fetch after insert
+            const { data: newData } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userId)
+              .single();
+            if (newData) {
+              console.log('Profile fetched (after insert):', newData);
+              setProfile(newData);
+            }
           }
         }
         return;
       }
 
+      console.log('Profile fetched:', data);
       setProfile(data);
     } catch (error) {
       console.error('Profile fetch error:', error);
     }
   };
+
+  // Manual refresh function
+  const refreshProfile = async () => {
+    if (user?.id) {
+      await fetchProfile(user.id);
+    }
+  };
+
+  useEffect(() => {
+    // Initialize session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      }
+      setLoading(false);
+    });
+
+    // Auth state changes
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth event:', event);
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      } else {
+        setProfile(null);
+      }
+    });
+
+    return () => {
+      authSubscription.unsubscribe();
+    };
+  }, []);
+
+  // Separate effect for profile updates (real-time + polling)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('Setting up profile monitoring for user:', user.id);
+
+    // Real-time subscription
+    const channel = supabase
+      .channel(`profile_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('Profile updated via realtime:', payload);
+          fetchProfile(user.id);
+        }
+      )
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+      });
+
+    // Aggressive polling - check every 2 seconds
+    const pollInterval = setInterval(() => {
+      console.log('Polling profile update...');
+      fetchProfile(user.id);
+    }, 2000);
+
+    return () => {
+      console.log('Cleaning up profile monitoring');
+      channel.unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, [user?.id]);
 
   const signUp = async (email: string, password: string, displayName: string) => {
     try {
@@ -188,7 +229,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!user) throw new Error('No user');
 
-      // Check if user already has a couple
+      // Refresh profile first to ensure we have latest data
+      await fetchProfile(user.id);
+
       if (profile?.couple_id) {
         return { error: { message: 'You are already connected to a partner' } };
       }
@@ -271,7 +314,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!user) throw new Error('No user');
 
-      // Check if user already has a couple
+      // Refresh profile first to ensure we have latest data
+      await fetchProfile(user.id);
+
       if (profile?.couple_id) {
         return { 
           success: false, 
@@ -279,8 +324,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
+      console.log('Accepting invite code:', code);
+
       // Call the database function to connect the couple
-      // This bypasses RLS and updates both profiles
       const { data, error } = await supabase.rpc('connect_couple', {
         p_code: code.trim(),
         p_accepter_id: user.id,
@@ -291,7 +337,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error };
       }
 
-      // Check the result from the function
+      console.log('Connect couple result:', data);
+
       if (!data.success) {
         return { 
           success: false, 
@@ -299,7 +346,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
-      // Refresh current user's profile
+      // Force immediate profile refresh
+      console.log('Connection successful, refreshing profile...');
+      await fetchProfile(user.id);
+
+      // Wait a moment and refresh again to ensure we get the updated data
+      await new Promise(resolve => setTimeout(resolve, 500));
       await fetchProfile(user.id);
 
       return { success: true, error: null };
@@ -321,6 +373,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     generateInviteCode,
     acceptInviteCode,
     getCurrentInviteCode,
+    refreshProfile, // NEW
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
