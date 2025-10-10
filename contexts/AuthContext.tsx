@@ -1,6 +1,6 @@
 // contexts/AuthContext.tsx
 import { Session, User } from '@supabase/supabase-js';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Profile, supabase } from '../lib/supabase';
 
 interface InviteCode {
@@ -23,10 +23,25 @@ interface AuthContextType {
   generateInviteCode: () => Promise<{ code?: string; error?: any }>;
   acceptInviteCode: (code: string) => Promise<{ success: boolean; error?: any }>;
   getCurrentInviteCode: () => Promise<{ code?: InviteCode; error?: any }>;
-  refreshProfile: () => Promise<void>; // NEW: Manual refresh
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Helper to compare profiles (only the fields we care about)
+const profilesAreEqual = (a: Profile | null, b: Profile | null): boolean => {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  
+  return (
+    a.id === b.id &&
+    a.email === b.email &&
+    a.display_name === b.display_name &&
+    a.couple_id === b.couple_id &&
+    a.partner_id === b.partner_id &&
+    a.avatar_url === b.avatar_url
+  );
+};
 
 // Helper function to generate a random 6-character code
 const generateRandomCode = (): string => {
@@ -43,11 +58,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Track if we need aggressive polling (e.g., after accepting invite)
+  const aggressivePollingRef = useRef(false);
+  const aggressivePollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch profile function (now stable reference)
-  const fetchProfile = async (userId: string) => {
+  // Fetch profile function with comparison to prevent unnecessary re-renders
+  const fetchProfile = async (userId: string, forceUpdate = false) => {
     try {
-      console.log('Fetching profile for user:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -71,7 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .eq('id', userId)
               .single();
             if (newData) {
-              console.log('Profile fetched (after insert):', newData);
               setProfile(newData);
             }
           }
@@ -79,8 +96,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      console.log('Profile fetched:', data);
-      setProfile(data);
+      // Only update state if profile actually changed or force update
+      if (forceUpdate || !profilesAreEqual(profile, data)) {
+        console.log('Profile updated:', data);
+        setProfile(data);
+      }
     } catch (error) {
       console.error('Profile fetch error:', error);
     }
@@ -89,8 +109,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Manual refresh function
   const refreshProfile = async () => {
     if (user?.id) {
-      await fetchProfile(user.id);
+      await fetchProfile(user.id, true);
     }
+  };
+
+  // Enable aggressive polling temporarily
+  const enableAggressivePolling = (durationMs = 10000) => {
+    console.log('Enabling aggressive polling for', durationMs, 'ms');
+    aggressivePollingRef.current = true;
+    
+    // Clear existing timeout
+    if (aggressivePollingTimeoutRef.current) {
+      clearTimeout(aggressivePollingTimeoutRef.current);
+    }
+    
+    // Disable after duration
+    aggressivePollingTimeoutRef.current = setTimeout(() => {
+      console.log('Disabling aggressive polling');
+      aggressivePollingRef.current = false;
+    }, durationMs);
   };
 
   useEffect(() => {
@@ -119,16 +156,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       authSubscription.unsubscribe();
+      if (aggressivePollingTimeoutRef.current) {
+        clearTimeout(aggressivePollingTimeoutRef.current);
+      }
     };
   }, []);
 
-  // Separate effect for profile updates (real-time + polling)
+  // Profile monitoring effect with smart polling
   useEffect(() => {
     if (!user?.id) return;
 
     console.log('Setting up profile monitoring for user:', user.id);
 
-    // Real-time subscription
+    // Real-time subscription (primary update mechanism)
     const channel = supabase
       .channel(`profile_${user.id}`)
       .on(
@@ -141,17 +181,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
         (payload) => {
           console.log('Profile updated via realtime:', payload);
-          fetchProfile(user.id);
+          fetchProfile(user.id, true);
         }
       )
       .subscribe((status) => {
         console.log('Subscription status:', status);
       });
 
-    // Aggressive polling - check every 2 seconds
+    // Polling only when aggressive mode is enabled
     const pollInterval = setInterval(() => {
-      console.log('Polling profile update...');
-      fetchProfile(user.id);
+      if (aggressivePollingRef.current) {
+        // Only poll when we're actively waiting for an update
+        fetchProfile(user.id);
+      }
+      // When not in aggressive mode, rely solely on real-time subscriptions
+      // No background polling = no unnecessary re-renders
     }, 2000);
 
     return () => {
@@ -159,7 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       channel.unsubscribe();
       clearInterval(pollInterval);
     };
-  }, [user?.id]);
+  }, [user?.id]); // Removed profile from deps to prevent recreation
 
   const signUp = async (email: string, password: string, displayName: string) => {
     try {
@@ -218,7 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', user.id);
 
       if (error) throw error;
-      await fetchProfile(user.id);
+      await fetchProfile(user.id, true);
     } catch (error) {
       console.error('Update profile error:', error);
       throw error;
@@ -280,6 +324,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error;
 
+      // Enable aggressive polling for the user who generated the code
+      // They need to see when their partner accepts
+      enableAggressivePolling(60000); // Poll aggressively for 1 minute
+
       return { code: data.code, error: null };
     } catch (error) {
       console.error('Generate invite code error:', error);
@@ -326,6 +374,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('Accepting invite code:', code);
 
+      // Enable aggressive polling temporarily
+      enableAggressivePolling(10000); // Poll aggressively for 10 seconds
+
       // Call the database function to connect the couple
       const { data, error } = await supabase.rpc('connect_couple', {
         p_code: code.trim(),
@@ -334,12 +385,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Connect couple error:', error);
+        aggressivePollingRef.current = false; // Disable on error
         return { success: false, error };
       }
 
       console.log('Connect couple result:', data);
 
       if (!data.success) {
+        aggressivePollingRef.current = false; // Disable on error
         return { 
           success: false, 
           error: { message: data.error || 'Failed to connect' } 
@@ -348,15 +401,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Force immediate profile refresh
       console.log('Connection successful, refreshing profile...');
-      await fetchProfile(user.id);
+      await fetchProfile(user.id, true);
 
       // Wait a moment and refresh again to ensure we get the updated data
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await fetchProfile(user.id);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await fetchProfile(user.id, true);
 
       return { success: true, error: null };
     } catch (error) {
       console.error('Accept invite code error:', error);
+      aggressivePollingRef.current = false; // Disable on error
       return { success: false, error };
     }
   };
@@ -373,7 +427,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     generateInviteCode,
     acceptInviteCode,
     getCurrentInviteCode,
-    refreshProfile, // NEW
+    refreshProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
