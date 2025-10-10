@@ -1,3 +1,4 @@
+// app/(auth)/couple-setup.tsx - UPDATED with loading state
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -15,17 +16,28 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function CoupleSetupScreen() {
-  const { generateInviteCode, acceptInviteCode, getCurrentInviteCode, profile } = useAuth();
+  const { generateInviteCode, acceptInviteCode, getCurrentInviteCode, profile, user } = useAuth();
   const [mode, setMode] = useState<'choose' | 'generate' | 'accept'>('choose');
   const [inviteCode, setInviteCode] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [codeExpiry, setCodeExpiry] = useState<Date | null>(null);
   const [timeRemaining, setTimeRemaining] = useState('');
+  const [initializing, setInitializing] = useState(true);
 
+  // Wait for user and profile to load
   useEffect(() => {
-    loadExistingCode();
-  }, []);
+    if (user && profile) {
+      setInitializing(false);
+      loadExistingCode();
+    } else if (user && !profile) {
+      // User exists but profile is still loading
+      const timeout = setTimeout(() => {
+        setInitializing(false);
+      }, 3000); // Give it 3 seconds max
+      return () => clearTimeout(timeout);
+    }
+  }, [user, profile]);
 
   useEffect(() => {
     if (!codeExpiry) return;
@@ -49,6 +61,7 @@ export default function CoupleSetupScreen() {
   }, [codeExpiry]);
 
   const loadExistingCode = async () => {
+    if (!user) return;
     const { code } = await getCurrentInviteCode();
     if (code) {
       setGeneratedCode(code.code);
@@ -130,6 +143,17 @@ export default function CoupleSetupScreen() {
     );
   };
 
+  // Show loading while waiting for user/profile to load
+  if (initializing || !user) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#EC4899" />
+        <Text style={styles.loadingText}>Setting up your account...</Text>
+      </View>
+    );
+  }
+
+  // Rest of your existing code...
   if (mode === 'choose') {
     return (
       <ScrollView contentContainerStyle={styles.container}>
@@ -338,9 +362,21 @@ export default function CoupleSetupScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFBF7',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#718096',
+    marginTop: 16,
+  },
   container: {
     flexGrow: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFBF7',
     padding: 20,
   },
   header: {
@@ -378,7 +414,7 @@ const styles = StyleSheet.create({
   optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F7FAFC',
+    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
@@ -389,7 +425,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#fff',
+    backgroundColor: '#F7FAFC',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -416,7 +452,7 @@ const styles = StyleSheet.create({
   },
   codeDisplay: {
     alignItems: 'center',
-    backgroundColor: '#F7FAFC',
+    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
@@ -429,7 +465,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   codeBox: {
-    backgroundColor: '#fff',
+    backgroundColor: '#F7FAFC',
     borderRadius: 12,
     paddingVertical: 20,
     paddingHorizontal: 40,
@@ -510,7 +546,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     fontSize: 24,
-    backgroundColor: '#F7FAFC',
+    backgroundColor: '#fff',
     textAlign: 'center',
     letterSpacing: 4,
     fontWeight: 'bold',

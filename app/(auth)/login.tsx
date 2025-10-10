@@ -1,17 +1,18 @@
+// app/(auth)/login.tsx
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { z } from 'zod';
 import { useAuth } from '../../contexts/AuthContext';
@@ -64,6 +65,7 @@ export default function LoginScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
+          <Text style={styles.emoji}>💕</Text>
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>Sign in to continue your love story</Text>
         </View>
@@ -147,7 +149,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFBF7',
   },
   scrollContent: {
     flexGrow: 1,
@@ -157,6 +159,10 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 40,
+  },
+  emoji: {
+    fontSize: 64,
+    marginBottom: 16,
   },
   title: {
     fontSize: 32,
@@ -186,7 +192,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
-    backgroundColor: '#F7FAFC',
+    backgroundColor: '#fff',
   },
   inputError: {
     borderColor: '#E53E3E',
