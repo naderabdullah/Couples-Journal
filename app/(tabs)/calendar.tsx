@@ -37,7 +37,7 @@ export default function CalendarScreen() {
   const { profile, user } = useAuth();
   const { theme } = useTheme();
   const [events, setEvents] = useState<Event[]>([]);
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [selectedDate, setSelectedDate] = useState<string | null>(null); // Changed to allow null
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -46,7 +46,7 @@ export default function CalendarScreen() {
   const [newEvent, setNewEvent] = useState({
     title: '',
     description: '',
-    event_date: selectedDate,
+    event_date: format(new Date(), 'yyyy-MM-dd'), // Use today as default
     event_time: '',
     category: 'other' as Event['category'],
     is_all_day: true,
@@ -110,23 +110,33 @@ export default function CalendarScreen() {
       }
     });
 
-    // Highlight selected date
-    if (marked[selectedDate]) {
-      marked[selectedDate].selected = true;
-      marked[selectedDate].selectedColor = theme.colors.primary;
-    } else {
-      marked[selectedDate] = {
-        selected: true,
-        selectedColor: theme.colors.primary,
-      };
+    // Highlight selected date if one is selected
+    if (selectedDate) {
+      if (marked[selectedDate]) {
+        marked[selectedDate].selected = true;
+        marked[selectedDate].selectedColor = theme.colors.primary;
+      } else {
+        marked[selectedDate] = {
+          selected: true,
+          selectedColor: theme.colors.primary,
+        };
+      }
     }
 
     setMarkedDates(marked);
   };
 
   const onDayPress = (day: DateData) => {
-    setSelectedDate(day.dateString);
-    setNewEvent({ ...newEvent, event_date: day.dateString });
+    // Toggle selection: if clicking the same date, deselect it
+    if (selectedDate === day.dateString) {
+      setSelectedDate(null);
+    } else {
+      setSelectedDate(day.dateString);
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedDate(null);
   };
 
   const openAddModal = () => {
@@ -134,7 +144,7 @@ export default function CalendarScreen() {
     setNewEvent({
       title: '',
       description: '',
-      event_date: selectedDate,
+      event_date: selectedDate || format(new Date(), 'yyyy-MM-dd'), // Use selected date or today
       event_time: '',
       category: 'other',
       is_all_day: true,
@@ -194,7 +204,7 @@ export default function CalendarScreen() {
       setNewEvent({
         title: '',
         description: '',
-        event_date: selectedDate,
+        event_date: selectedDate || format(new Date(), 'yyyy-MM-dd'),
         event_time: '',
         category: 'other',
         is_all_day: true,
@@ -235,7 +245,11 @@ export default function CalendarScreen() {
     );
   };
 
-  const getEventsForSelectedDate = () => {
+  // Modified to show all events when no date is selected
+  const getEventsToDisplay = () => {
+    if (selectedDate === null) {
+      return events; // Show all events
+    }
     return events.filter((event) => event.event_date === selectedDate);
   };
 
@@ -258,6 +272,11 @@ export default function CalendarScreen() {
               />
             </View>
             <View style={styles.eventTextContainer}>
+              {selectedDate === null && (
+                <Text style={styles.eventDate}>
+                  {format(parseISO(item.event_date), 'MMM d, yyyy')}
+                </Text>
+              )}
               <Text style={styles.eventTitle}>{item.title}</Text>
               {!item.is_all_day && item.event_time && (
                 <Text style={styles.eventTime}>
@@ -297,7 +316,7 @@ export default function CalendarScreen() {
     );
   }
 
-  const selectedDateEvents = getEventsForSelectedDate();
+  const displayedEvents = getEventsToDisplay();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -313,7 +332,7 @@ export default function CalendarScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <Calendar
-          current={selectedDate}
+          current={selectedDate || format(new Date(), 'yyyy-MM-dd')}
           onDayPress={onDayPress}
           markingType="multi-dot"
           markedDates={markedDates}
@@ -342,25 +361,37 @@ export default function CalendarScreen() {
 
         <View style={styles.eventsSection}>
           <View style={styles.eventsSectionHeader}>
-            <Text style={styles.sectionTitle}>
-              {format(parseISO(selectedDate), 'MMMM d, yyyy')}
-            </Text>
+            <View style={styles.sectionTitleContainer}>
+              <Text style={styles.sectionTitle}>
+                {selectedDate === null 
+                  ? 'All Events' 
+                  : format(parseISO(selectedDate), 'MMMM d, yyyy')}
+              </Text>
+              {selectedDate !== null && (
+                <TouchableOpacity onPress={clearSelection} style={styles.clearButton}>
+                  <Ionicons name="close-circle" size={20} color={theme.colors.textLight} />
+                  <Text style={styles.clearButtonText}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
             <Text style={styles.eventCount}>
-              {selectedDateEvents.length} {selectedDateEvents.length === 1 ? 'event' : 'events'}
+              {displayedEvents.length} {displayedEvents.length === 1 ? 'event' : 'events'}
             </Text>
           </View>
 
           {loading ? (
             <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 20 }} />
-          ) : selectedDateEvents.length === 0 ? (
+          ) : displayedEvents.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="calendar-outline" size={48} color={theme.colors.border} />
-              <Text style={styles.emptyTitle}>No events on this day</Text>
+              <Text style={styles.emptyTitle}>
+                {selectedDate === null ? 'No events yet' : 'No events on this day'}
+              </Text>
               <Text style={styles.emptyText}>Tap + to add an event</Text>
             </View>
           ) : (
             <FlatList
-              data={selectedDateEvents}
+              data={displayedEvents}
               renderItem={renderEventItem}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.eventsList}
@@ -539,10 +570,29 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: theme.colors.text,
+  },
+  clearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: theme.colors.inputBackground,
+    borderRadius: 12,
+  },
+  clearButtonText: {
+    fontSize: 12,
+    color: theme.colors.textLight,
   },
   eventCount: {
     fontSize: 14,
@@ -582,6 +632,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   eventTextContainer: {
     flex: 1,
+  },
+  eventDate: {
+    fontSize: 12,
+    color: theme.colors.textLight,
+    marginBottom: 2,
+    fontWeight: '500',
   },
   eventTitle: {
     fontSize: 16,
