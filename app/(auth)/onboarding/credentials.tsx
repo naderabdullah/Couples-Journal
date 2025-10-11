@@ -136,7 +136,7 @@ export default function CredentialsScreen() {
           {
             text: 'Continue',
             onPress: () => {
-              router.replace('/(auth)/couple-setup');
+              router.replace('/(auth)/onboarding/connect');
             },
           },
         ]
@@ -164,6 +164,7 @@ export default function CredentialsScreen() {
           <View style={[styles.progressDot, styles.progressDotComplete]} />
           <View style={[styles.progressDot, styles.progressDotComplete]} />
           <View style={styles.progressDot} />
+          <View style={[styles.progressDot, styles.progressDotInactive]} />
         </View>
 
         <ScrollView 
@@ -295,7 +296,7 @@ export default function CredentialsScreen() {
             </Text>
           </TouchableOpacity>
           
-          <Text style={styles.stepText}>Step 5 of 5</Text>
+          <Text style={styles.stepText}>Step 5 of 6</Text>
         </Animated.View>
       </KeyboardAvoidingView>
     </SafeAreaView>
