@@ -128,19 +128,8 @@ export default function CredentialsScreen() {
       // Success! Clear onboarding data and show welcome
       console.log('Everything ready, navigating to couple setup...');
       reset();
+      router.replace('/(auth)/couple-setup');
       
-      Alert.alert(
-        '🎉 Welcome!',
-        `Great to have you, ${data.displayName}!`,
-        [
-          {
-            text: 'Continue',
-            onPress: () => {
-              router.replace('/(auth)/onboarding/connect');
-            },
-          },
-        ]
-      );
     } catch (error) {
       console.error('Unexpected error:', error);
       Alert.alert('Error', 'An unexpected error occurred');

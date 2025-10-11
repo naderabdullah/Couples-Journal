@@ -29,27 +29,27 @@ function RootLayoutNav() {
   const loading = authLoading || themeLoading;
 
   useEffect(() => {
-    if (loading) return; // Still loading, don't navigate
+    if (loading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const inTabsGroup = segments[0] === '(tabs)';
+    const isLoginOrRegister = segments[1] === 'login' || segments[1] === 'register';
 
     debugLog('Navigation check', { 
       loading, 
       user: !!user, 
       inAuthGroup, 
-      inTabsGroup,
+      isLoginOrRegister,
       segments 
     });
 
     if (!user && !inAuthGroup) {
       // Not signed in and not in auth group, redirect to login
       router.replace('/(auth)/login');
-    } else if (user && inAuthGroup) {
-      // Signed in but still in auth group, redirect to tabs
+    } else if (user && isLoginOrRegister) {
+      // Signed in but on login/register page, redirect to tabs
       router.replace('/(tabs)');
     }
-    // Otherwise, user is in the right place
+    // Otherwise, let them stay wherever they are
   }, [user, segments, loading]);
 
   if (loading) {
