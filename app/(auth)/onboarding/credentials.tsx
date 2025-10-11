@@ -1,4 +1,4 @@
-// app/(auth)/onboarding/credentials.tsx - THEME ALREADY APPLIED
+// app/(auth)/onboarding/credentials.tsx - FIXED PROGRESS DOTS
 import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
@@ -39,7 +39,7 @@ type CredentialsForm = z.infer<typeof credentialsSchema>;
 
 export default function CredentialsScreen() {
   const { signUp } = useAuth();
-  const { theme } = useTheme(); // Theme is already applied from previous screen
+  const { theme } = useTheme();
   const { data, setCredentials, reset } = useOnboarding();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -63,12 +63,8 @@ export default function CredentialsScreen() {
       
       console.log('Submitting credentials...');
       
-      // Store credentials in onboarding context
       setCredentials(formData.email, formData.password);
       
-      // Theme is already applied from theme selection screen, no need to apply again
-      
-      // Create the account - profile will be auto-created by database trigger
       const { data: signUpData, error } = await signUp(
         formData.email, 
         formData.password, 
@@ -89,16 +85,14 @@ export default function CredentialsScreen() {
       const userId = signUpData.user.id;
       console.log('Sign up successful for user:', userId);
       
-      // Wait for the database trigger to create the profile
       console.log('Waiting for profile to be created by database trigger...');
       let profileCreated = false;
       let attempts = 0;
-      const maxAttempts = 30; // 15 seconds max
+      const maxAttempts = 30;
       
       while (!profileCreated && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        // Check if profile exists
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('id')
@@ -125,7 +119,6 @@ export default function CredentialsScreen() {
         return;
       }
       
-      // Success! Clear onboarding data and show welcome
       console.log('Everything ready, navigating to couple setup...');
       reset();
       router.replace('/(auth)/couple-setup');
@@ -146,7 +139,7 @@ export default function CredentialsScreen() {
         style={styles.content}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Progress indicator */}
+        {/* Progress indicator - Step 5 of 6 */}
         <View style={styles.progressContainer}>
           <View style={[styles.progressDot, styles.progressDotComplete]} />
           <View style={[styles.progressDot, styles.progressDotComplete]} />

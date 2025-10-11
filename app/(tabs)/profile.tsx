@@ -1,4 +1,4 @@
-// app/(tabs)/profile.tsx
+// app/(tabs)/profile.tsx - FIXED X BUTTON POSITIONING
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -609,7 +609,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   modalContent: {
     flex: 1,
     backgroundColor: theme.colors.cardBackground,
-    paddingTop: 20,
+    paddingTop: 8,  // ✅ REDUCED from 20 - X button more accessible
     paddingHorizontal: 20,
   },
   modalHeader: {
@@ -617,7 +617,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
-    paddingTop: 10,
+    paddingTop: 4,  // ✅ REDUCED from 10 - Better tap area
   },
   modalTitle: {
     fontSize: 18,

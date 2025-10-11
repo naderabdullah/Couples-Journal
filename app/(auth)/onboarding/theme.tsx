@@ -1,4 +1,4 @@
-// app/(auth)/onboarding/theme.tsx - APPLIES THEME IMMEDIATELY
+// app/(auth)/onboarding/theme.tsx - FIXED PROGRESS DOTS
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -113,11 +113,12 @@ export default function ThemeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Progress indicator */}
+      {/* Progress indicator - Step 3 of 6 */}
       <View style={styles.progressContainer}>
         <View style={[styles.progressDot, styles.progressDotComplete]} />
         <View style={[styles.progressDot, styles.progressDotComplete]} />
         <View style={styles.progressDot} />
+        <View style={[styles.progressDot, styles.progressDotInactive]} />
         <View style={[styles.progressDot, styles.progressDotInactive]} />
         <View style={[styles.progressDot, styles.progressDotInactive]} />
       </View>
@@ -183,7 +184,7 @@ export default function ThemeScreen() {
           <Ionicons name="arrow-forward" size={20} color="#fff" />
         </TouchableOpacity>
         
-        <Text style={styles.stepText}>Step 3 of 5</Text>
+        <Text style={styles.stepText}>Step 3 of 6</Text>
       </Animated.View>
     </SafeAreaView>
   );

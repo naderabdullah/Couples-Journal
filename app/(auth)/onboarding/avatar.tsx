@@ -1,4 +1,4 @@
-// app/(auth)/onboarding/avatar.tsx - WITH THEME SUPPORT
+// app/(auth)/onboarding/avatar.tsx - WITH LIGHT THEME FORCED
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
@@ -23,8 +23,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { themes } from '../../../constants/themes';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
-import { useTheme } from '../../../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -37,7 +37,8 @@ const AVATAR_EMOJIS = [
 
 export default function AvatarScreen() {
   const { data, setAvatarUrl } = useOnboarding();
-  const { theme } = useTheme();
+  // Force light theme for this page
+  const theme = themes.light;
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
 
@@ -117,10 +118,11 @@ export default function AvatarScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Progress indicator */}
+      {/* Progress indicator - Step 2 of 6 */}
       <View style={styles.progressContainer}>
         <View style={[styles.progressDot, styles.progressDotComplete]} />
         <View style={styles.progressDot} />
+        <View style={[styles.progressDot, styles.progressDotInactive]} />
         <View style={[styles.progressDot, styles.progressDotInactive]} />
         <View style={[styles.progressDot, styles.progressDotInactive]} />
         <View style={[styles.progressDot, styles.progressDotInactive]} />
@@ -218,7 +220,7 @@ export default function AvatarScreen() {
           <Ionicons name="arrow-forward" size={20} color="#fff" />
         </TouchableOpacity>
         
-        <Text style={styles.stepText}>Step 2 of 5</Text>
+        <Text style={styles.stepText}>Step 2 of 6</Text>
       </Animated.View>
     </SafeAreaView>
   );

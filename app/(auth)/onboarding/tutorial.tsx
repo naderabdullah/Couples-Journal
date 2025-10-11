@@ -1,19 +1,19 @@
-// app/(auth)/onboarding/tutorial.tsx
+// app/(auth)/onboarding/tutorial.tsx - FIXED PROGRESS DOTS
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
-    Dimensions,
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Animated, {
-    FadeInDown,
-    FadeInRight,
+  FadeInDown,
+  FadeInRight,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -119,12 +119,13 @@ export default function TutorialScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Progress indicator */}
+      {/* Progress indicator - Step 4 of 6 */}
       <View style={styles.progressContainer}>
         <View style={[styles.progressDot, styles.progressDotComplete]} />
         <View style={[styles.progressDot, styles.progressDotComplete]} />
         <View style={[styles.progressDot, styles.progressDotComplete]} />
         <View style={styles.progressDot} />
+        <View style={[styles.progressDot, styles.progressDotInactive]} />
         <View style={[styles.progressDot, styles.progressDotInactive]} />
       </View>
 
@@ -175,7 +176,7 @@ export default function TutorialScreen() {
           <Ionicons name="arrow-forward" size={20} color="#fff" />
         </TouchableOpacity>
         
-        <Text style={styles.stepText}>Step 4 of 5</Text>
+        <Text style={styles.stepText}>Step 4 of 6</Text>
       </View>
     </SafeAreaView>
   );

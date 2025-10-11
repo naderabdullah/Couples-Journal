@@ -22,12 +22,13 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { themes } from '../../../constants/themes';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
-import { useTheme } from '../../../contexts/ThemeContext';
 
 export default function NameScreen() {
   const { setDisplayName } = useOnboarding();
-  const { theme } = useTheme();
+  // Force light theme for this page
+  const theme = themes.light;
   const [name, setName] = useState('');
 
   // Bouncing heart animation
@@ -69,9 +70,10 @@ export default function NameScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Progress indicator */}
+          {/* Progress indicator - Step 1 of 6 */}
           <View style={styles.progressContainer}>
             <View style={styles.progressDot} />
+            <View style={[styles.progressDot, styles.progressDotInactive]} />
             <View style={[styles.progressDot, styles.progressDotInactive]} />
             <View style={[styles.progressDot, styles.progressDotInactive]} />
             <View style={[styles.progressDot, styles.progressDotInactive]} />
@@ -124,7 +126,7 @@ export default function NameScreen() {
             <Ionicons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
           
-          <Text style={styles.stepText}>Step 1 of 5</Text>
+          <Text style={styles.stepText}>Step 1 of 6</Text>
         </Animated.View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -143,7 +145,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 30,
     paddingTop: 20,
-    paddingBottom: 140, // Space for bottom container
+    paddingBottom: 140,
   },
   progressContainer: {
     flexDirection: 'row',
