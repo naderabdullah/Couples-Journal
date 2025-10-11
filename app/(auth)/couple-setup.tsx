@@ -27,14 +27,44 @@ export default function CoupleSetupScreen() {
 
   // Wait for user and profile to load
   useEffect(() => {
+    console.log('Couple setup - checking auth state:', { 
+      hasUser: !!user, 
+      hasProfile: !!profile,
+      coupleId: profile?.couple_id 
+    });
+
     if (user && profile) {
+      console.log('User and profile loaded');
       setInitializing(false);
       loadExistingCode();
     } else if (user && !profile) {
+      console.log('User exists but profile loading...');
       // User exists but profile is still loading
       const timeout = setTimeout(() => {
+        console.log('Profile load timeout, continuing anyway');
         setInitializing(false);
-      }, 3000); // Give it 3 seconds max
+      }, 5000); // Give it 5 seconds max
+      return () => clearTimeout(timeout);
+    } else if (!user) {
+      console.log('No user yet, waiting...');
+      // No user yet - wait a bit longer
+      const timeout = setTimeout(() => {
+        console.log('User load timeout');
+        setInitializing(false);
+        // If still no user after timeout, show error
+        if (!user) {
+          Alert.alert(
+            'Session Error',
+            'Unable to load your session. Please try logging in again.',
+            [
+              {
+                text: 'Go to Login',
+                onPress: () => router.replace('/(auth)/login'),
+              },
+            ]
+          );
+        }
+      }, 5000);
       return () => clearTimeout(timeout);
     }
   }, [user, profile]);

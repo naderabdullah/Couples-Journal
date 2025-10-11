@@ -5,25 +5,26 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Animated, {
-    FadeInDown,
-    FadeInUp,
+  FadeInDown,
+  FadeInUp,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { supabase } from '../../../lib/supabase';
 
 const credentialsSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -60,28 +61,75 @@ export default function CredentialsScreen() {
     try {
       setLoading(true);
       
+      console.log('Submitting credentials...');
+      
       // Store credentials in onboarding context
       setCredentials(formData.email, formData.password);
       
       // Apply the selected theme
       setAppTheme(data.theme);
       
-      // Create the account with all the collected data
-      const { error } = await signUp(
+      // Create the account - profile will be auto-created by database trigger
+      const { data: signUpData, error } = await signUp(
         formData.email, 
         formData.password, 
         data.displayName
       );
       
       if (error) {
+        console.error('Sign up failed:', error);
         Alert.alert('Error', error.message || 'Failed to create account');
         return;
       }
 
-      // Wait a moment for auth state to update
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      if (!signUpData?.user) {
+        Alert.alert('Error', 'Failed to create account. Please try again.');
+        return;
+      }
+
+      const userId = signUpData.user.id;
+      console.log('Sign up successful for user:', userId);
       
-      // Success! Show celebration and go to couple setup
+      // Wait for the database trigger to create the profile
+      console.log('Waiting for profile to be created by database trigger...');
+      let profileCreated = false;
+      let attempts = 0;
+      const maxAttempts = 30; // 15 seconds max
+      
+      while (!profileCreated && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Check if profile exists
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', userId)
+          .single();
+        
+        if (profileData && !profileError) {
+          console.log('Profile created successfully by trigger!');
+          profileCreated = true;
+          break;
+        }
+        
+        attempts++;
+        console.log(`Waiting for profile... attempt ${attempts}/${maxAttempts}`);
+      }
+      
+      if (!profileCreated) {
+        console.error('Profile was not created by trigger');
+        Alert.alert(
+          'Setup Error',
+          'Your account was created but profile setup failed. Please contact support.',
+          [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
+        );
+        return;
+      }
+      
+      // Success! Clear onboarding data and show welcome
+      console.log('Everything ready, navigating to couple setup...');
+      reset();
+      
       Alert.alert(
         '🎉 Welcome!',
         `Great to have you, ${data.displayName}!`,
@@ -89,13 +137,13 @@ export default function CredentialsScreen() {
           {
             text: 'Continue',
             onPress: () => {
-              reset(); // Clear onboarding data
               router.replace('/(auth)/couple-setup');
             },
           },
         ]
       );
     } catch (error) {
+      console.error('Unexpected error:', error);
       Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
