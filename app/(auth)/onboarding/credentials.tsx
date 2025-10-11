@@ -1,4 +1,4 @@
-// app/(auth)/onboarding/credentials.tsx
+// app/(auth)/onboarding/credentials.tsx - THEME ALREADY APPLIED
 import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
@@ -39,7 +39,7 @@ type CredentialsForm = z.infer<typeof credentialsSchema>;
 
 export default function CredentialsScreen() {
   const { signUp } = useAuth();
-  const { theme, setTheme: setAppTheme } = useTheme();
+  const { theme } = useTheme(); // Theme is already applied from previous screen
   const { data, setCredentials, reset } = useOnboarding();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -66,8 +66,7 @@ export default function CredentialsScreen() {
       // Store credentials in onboarding context
       setCredentials(formData.email, formData.password);
       
-      // Apply the selected theme
-      setAppTheme(data.theme);
+      // Theme is already applied from theme selection screen, no need to apply again
       
       // Create the account - profile will be auto-created by database trigger
       const { data: signUpData, error } = await signUp(
@@ -189,13 +188,13 @@ export default function CredentialsScreen() {
                   <TextInput
                     style={[styles.input, errors.email && styles.inputError]}
                     placeholder="your@email.com"
+                    placeholderTextColor={theme.colors.textLight}
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
-                    placeholderTextColor={theme.colors.textLight}
                   />
                   {errors.email && (
                     <Text style={styles.errorText}>{errors.email.message}</Text>
@@ -214,12 +213,12 @@ export default function CredentialsScreen() {
                     <TextInput
                       style={[styles.input, styles.passwordInput, errors.password && styles.inputError]}
                       placeholder="Create a secure password"
+                      placeholderTextColor={theme.colors.textLight}
                       value={value}
                       onChangeText={onChange}
                       onBlur={onBlur}
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
-                      placeholderTextColor={theme.colors.textLight}
                     />
                     <TouchableOpacity
                       style={styles.eyeButton}
@@ -248,12 +247,12 @@ export default function CredentialsScreen() {
                   <TextInput
                     style={[styles.input, errors.confirmPassword && styles.inputError]}
                     placeholder="Confirm your password"
+                    placeholderTextColor={theme.colors.textLight}
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
-                    placeholderTextColor={theme.colors.textLight}
                   />
                   {errors.confirmPassword && (
                     <Text style={styles.errorText}>{errors.confirmPassword.message}</Text>
@@ -420,7 +419,11 @@ const createStyles = (theme: any) => StyleSheet.create({
   bottomContainer: {
     paddingHorizontal: 30,
     paddingBottom: 20,
+    paddingTop: 12,
     gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.background,
   },
   createButton: {
     backgroundColor: theme.colors.primary,

@@ -1,21 +1,22 @@
-// app/(auth)/onboarding/theme.tsx
+// app/(auth)/onboarding/theme.tsx - APPLIES THEME IMMEDIATELY
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Animated, {
-    FadeInDown,
-    FadeInUp,
+  FadeInDown,
+  FadeInUp,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemeName, themes } from '../../../constants/themes';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 const THEME_OPTIONS = [
   {
@@ -45,59 +46,70 @@ const THEME_OPTIONS = [
 ];
 
 export default function ThemeScreen() {
-  const { data, setTheme } = useOnboarding();
+  const { data, setTheme: setOnboardingTheme } = useOnboarding();
+  const { theme, setTheme: setAppTheme } = useTheme();
   const [selectedTheme, setSelectedTheme] = useState<ThemeName>(data.theme || 'light');
 
+  const handleThemeSelect = (themeName: ThemeName) => {
+    setSelectedTheme(themeName);
+    // APPLY THEME IMMEDIATELY
+    setAppTheme(themeName);
+    setOnboardingTheme(themeName);
+  };
+
   const handleContinue = () => {
-    setTheme(selectedTheme);
+    // Theme is already applied, just navigate
     router.push('/(auth)/onboarding/tutorial');
   };
 
   const handleSkip = () => {
-    setTheme('light'); // Default to light
+    setAppTheme('light'); // Default to light
+    setOnboardingTheme('light');
     router.push('/(auth)/onboarding/tutorial');
   };
 
   const renderThemePreview = (themeName: ThemeName) => {
-    const theme = themes[themeName];
+    const previewTheme = themes[themeName];
     return (
       <View style={styles.previewContainer}>
         {/* Mini app preview */}
-        <View style={[styles.previewPhone, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.previewPhone, { backgroundColor: previewTheme.colors.background }]}>
           {/* Header */}
-          <View style={[styles.previewHeader, { backgroundColor: theme.colors.cardBackground }]}>
-            <View style={[styles.previewIcon, { backgroundColor: theme.colors.primary }]} />
+          <View style={[styles.previewHeader, { backgroundColor: previewTheme.colors.cardBackground }]}>
+            <View style={[styles.previewIcon, { backgroundColor: previewTheme.colors.primary }]} />
             <View style={styles.previewHeaderText}>
-              <View style={[styles.previewTextLine, { backgroundColor: theme.colors.text, width: 60 }]} />
+              <View style={[styles.previewTextLine, { backgroundColor: previewTheme.colors.text, width: 60 }]} />
             </View>
           </View>
           
           {/* Content cards */}
           <View style={styles.previewContent}>
-            <View style={[styles.previewCard, { backgroundColor: theme.colors.cardBackground, borderColor: theme.colors.border }]}>
-              <View style={[styles.previewCircle, { backgroundColor: theme.colors.primary }]} />
-              <View style={[styles.previewTextLine, { backgroundColor: theme.colors.text, width: 80 }]} />
-              <View style={[styles.previewTextLine, { backgroundColor: theme.colors.textSecondary, width: 100 }]} />
+            <View style={[styles.previewCard, { backgroundColor: previewTheme.colors.cardBackground, borderColor: previewTheme.colors.border }]}>
+              <View style={[styles.previewCircle, { backgroundColor: previewTheme.colors.primary }]} />
+              <View style={[styles.previewTextLine, { backgroundColor: previewTheme.colors.text, width: 80 }]} />
+              <View style={[styles.previewTextLine, { backgroundColor: previewTheme.colors.textSecondary, width: 100 }]} />
             </View>
             
-            <View style={[styles.previewCard, { backgroundColor: theme.colors.cardBackground, borderColor: theme.colors.border }]}>
-              <View style={[styles.previewCircle, { backgroundColor: theme.colors.secondary }]} />
-              <View style={[styles.previewTextLine, { backgroundColor: theme.colors.text, width: 70 }]} />
-              <View style={[styles.previewTextLine, { backgroundColor: theme.colors.textSecondary, width: 90 }]} />
+            <View style={[styles.previewCard, { backgroundColor: previewTheme.colors.cardBackground, borderColor: previewTheme.colors.border }]}>
+              <View style={[styles.previewCircle, { backgroundColor: previewTheme.colors.secondary }]} />
+              <View style={[styles.previewTextLine, { backgroundColor: previewTheme.colors.text, width: 70 }]} />
+              <View style={[styles.previewTextLine, { backgroundColor: previewTheme.colors.textSecondary, width: 90 }]} />
             </View>
           </View>
           
           {/* Bottom nav */}
-          <View style={[styles.previewNav, { backgroundColor: theme.colors.cardBackground, borderTopColor: theme.colors.border }]}>
-            <View style={[styles.previewNavItem, { backgroundColor: theme.colors.primary }]} />
-            <View style={[styles.previewNavItem, { backgroundColor: theme.colors.border }]} />
-            <View style={[styles.previewNavItem, { backgroundColor: theme.colors.border }]} />
-            <View style={[styles.previewNavItem, { backgroundColor: theme.colors.border }]} />
+          <View style={[styles.previewNav, { backgroundColor: previewTheme.colors.cardBackground, borderTopColor: previewTheme.colors.border }]}>
+            <View style={[styles.previewNavItem, { backgroundColor: previewTheme.colors.primary }]} />
+            <View style={[styles.previewNavItem, { backgroundColor: previewTheme.colors.border }]} />
+            <View style={[styles.previewNavItem, { backgroundColor: previewTheme.colors.border }]} />
+            <View style={[styles.previewNavItem, { backgroundColor: previewTheme.colors.border }]} />
           </View>
         </View>
       </View>
     );
   };
+
+  const styles = createStyles(theme);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -122,7 +134,7 @@ export default function ThemeScreen() {
         <Animated.View entering={FadeInUp.delay(400).springify()} style={styles.themesContainer}>
           {THEME_OPTIONS.map((option, index) => {
             const isSelected = selectedTheme === option.name;
-            const theme = themes[option.name];
+            const optionTheme = themes[option.name];
             
             return (
               <Animated.View
@@ -133,9 +145,9 @@ export default function ThemeScreen() {
                   style={[
                     styles.themeCard,
                     isSelected && styles.themeCardSelected,
-                    { borderColor: isSelected ? theme.colors.primary : '#E2E8F0' },
+                    { borderColor: isSelected ? optionTheme.colors.primary : theme.colors.border },
                   ]}
-                  onPress={() => setSelectedTheme(option.name)}
+                  onPress={() => handleThemeSelect(option.name)}
                 >
                   <View style={styles.themeCardHeader}>
                     <Text style={styles.themeEmoji}>{option.emoji}</Text>
@@ -144,7 +156,7 @@ export default function ThemeScreen() {
                       <Text style={styles.themeDescription}>{option.description}</Text>
                     </View>
                     {isSelected && (
-                      <View style={[styles.checkmark, { backgroundColor: theme.colors.primary }]}>
+                      <View style={[styles.checkmark, { backgroundColor: optionTheme.colors.primary }]}>
                         <Ionicons name="checkmark" size={20} color="#fff" />
                       </View>
                     )}
@@ -177,10 +189,10 @@ export default function ThemeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFBF7',
+    backgroundColor: theme.colors.background,
   },
   progressContainer: {
     flexDirection: 'row',
@@ -193,17 +205,17 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#EC4899',
+    backgroundColor: theme.colors.primary,
   },
   progressDotInactive: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: theme.colors.border,
   },
   progressDotComplete: {
-    backgroundColor: '#10B981',
+    backgroundColor: theme.colors.success,
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 140,
+    paddingBottom: 180,
   },
   header: {
     alignItems: 'center',
@@ -216,19 +228,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#2D3748',
+    color: theme.colors.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#718096',
+    color: theme.colors.textSecondary,
     textAlign: 'center',
   },
   themesContainer: {
     gap: 16,
   },
   themeCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.cardBackground,
     borderRadius: 20,
     padding: 16,
     borderWidth: 3,
@@ -239,7 +251,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   themeCardSelected: {
-    shadowColor: '#EC4899',
+    shadowColor: theme.colors.primary,
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
@@ -259,12 +271,12 @@ const styles = StyleSheet.create({
   themeTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2D3748',
+    color: theme.colors.text,
     marginBottom: 2,
   },
   themeDescription: {
     fontSize: 14,
-    color: '#718096',
+    color: theme.colors.textSecondary,
   },
   checkmark: {
     width: 32,
@@ -282,7 +294,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: '#E2E8F0',
+    borderColor: theme.colors.border,
   },
   previewHeader: {
     flexDirection: 'row',
@@ -338,9 +350,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 20,
-    backgroundColor: '#FFFBF7',
+    backgroundColor: theme.colors.background,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: theme.colors.border,
     gap: 12,
   },
   skipButton: {
@@ -348,7 +360,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   skipButtonText: {
-    color: '#718096',
+    color: theme.colors.textSecondary,
     fontSize: 16,
     fontWeight: '500',
   },
@@ -372,7 +384,7 @@ const styles = StyleSheet.create({
   },
   stepText: {
     textAlign: 'center',
-    color: '#9CA3AF',
+    color: theme.colors.textLight,
     fontSize: 14,
   },
 });

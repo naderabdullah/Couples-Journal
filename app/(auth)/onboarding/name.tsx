@@ -3,28 +3,31 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Animated, {
-    FadeInDown,
-    FadeInUp,
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withSequence,
-    withTiming,
+  FadeInDown,
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 export default function NameScreen() {
   const { setDisplayName } = useOnboarding();
+  const { theme } = useTheme();
   const [name, setName] = useState('');
 
   // Bouncing heart animation
@@ -52,22 +55,29 @@ export default function NameScreen() {
     }
   };
 
+  const styles = createStyles(theme);
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.content}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        {/* Progress indicator */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressDot} />
-          <View style={[styles.progressDot, styles.progressDotInactive]} />
-          <View style={[styles.progressDot, styles.progressDotInactive]} />
-          <View style={[styles.progressDot, styles.progressDotInactive]} />
-          <View style={[styles.progressDot, styles.progressDotInactive]} />
-        </View>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Progress indicator */}
+          <View style={styles.progressContainer}>
+            <View style={styles.progressDot} />
+            <View style={[styles.progressDot, styles.progressDotInactive]} />
+            <View style={[styles.progressDot, styles.progressDotInactive]} />
+            <View style={[styles.progressDot, styles.progressDotInactive]} />
+            <View style={[styles.progressDot, styles.progressDotInactive]} />
+          </View>
 
-        <View style={styles.mainContent}>
           <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.emojiContainer}>
             <Animated.Text style={[styles.emoji, heartStyle]}>💕</Animated.Text>
           </Animated.View>
@@ -81,6 +91,7 @@ export default function NameScreen() {
             <TextInput
               style={styles.input}
               placeholder="Enter your name..."
+              placeholderTextColor={theme.colors.textLight}
               value={name}
               onChangeText={setName}
               autoFocus
@@ -95,13 +106,13 @@ export default function NameScreen() {
 
           {/* Encouraging message */}
           {name.trim().length >= 2 && (
-            <Animated.View entering={FadeInUp.springify()}>
+            <Animated.View entering={FadeInUp.springify()} style={styles.encouragementContainer}>
               <Text style={styles.encouragement}>
                 Nice to meet you, {name}! 👋
               </Text>
             </Animated.View>
           )}
-        </View>
+        </ScrollView>
 
         <Animated.View entering={FadeInUp.delay(800).springify()} style={styles.bottomContainer}>
           <TouchableOpacity
@@ -120,34 +131,34 @@ export default function NameScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFBF7',
+    backgroundColor: theme.colors.background,
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 30,
+    paddingTop: 20,
+    paddingBottom: 140, // Space for bottom container
   },
   progressContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 20,
     marginBottom: 40,
   },
   progressDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#EC4899',
+    backgroundColor: theme.colors.primary,
   },
   progressDotInactive: {
-    backgroundColor: '#E2E8F0',
-  },
-  mainContent: {
-    flex: 1,
-    justifyContent: 'center',
+    backgroundColor: theme.colors.border,
   },
   emojiContainer: {
     alignItems: 'center',
@@ -159,13 +170,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#2D3748',
+    color: theme.colors.text,
     textAlign: 'center',
     marginBottom: 12,
   },
   subtitle: {
     fontSize: 18,
-    color: '#718096',
+    color: theme.colors.textSecondary,
     textAlign: 'center',
     marginBottom: 40,
   },
@@ -174,43 +185,57 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 2,
-    borderColor: '#EC4899',
+    borderColor: theme.colors.primary,
     borderRadius: 20,
     padding: 20,
     fontSize: 20,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.cardBackground,
     textAlign: 'center',
-    shadowColor: '#EC4899',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
+    color: theme.colors.text,
   },
   errorText: {
-    color: '#E53E3E',
+    color: theme.colors.error,
     fontSize: 14,
     textAlign: 'center',
     marginTop: 8,
   },
+  encouragementContainer: {
+    marginTop: 10,
+    marginBottom: 20,
+  },
   encouragement: {
     fontSize: 18,
-    color: '#EC4899',
+    color: theme.colors.primary,
     textAlign: 'center',
     fontWeight: '600',
   },
   bottomContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 30,
     paddingBottom: 20,
+    paddingTop: 12,
     gap: 12,
+    backgroundColor: theme.colors.background,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
   },
   continueButton: {
-    backgroundColor: '#EC4899',
+    backgroundColor: theme.colors.primary,
     borderRadius: 20,
     padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: '#EC4899',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -226,7 +251,7 @@ const styles = StyleSheet.create({
   },
   stepText: {
     textAlign: 'center',
-    color: '#9CA3AF',
+    color: theme.colors.textLight,
     fontSize: 14,
   },
 });

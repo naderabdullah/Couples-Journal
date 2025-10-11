@@ -1,29 +1,30 @@
-// app/(auth)/onboarding/avatar.tsx
+// app/(auth)/onboarding/avatar.tsx - WITH THEME SUPPORT
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    Dimensions,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Animated, {
-    FadeIn,
-    FadeInDown,
-    FadeInUp,
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withSequence,
-    withTiming,
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -36,6 +37,7 @@ const AVATAR_EMOJIS = [
 
 export default function AvatarScreen() {
   const { data, setAvatarUrl } = useOnboarding();
+  const { theme } = useTheme();
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
 
@@ -111,6 +113,8 @@ export default function AvatarScreen() {
     router.push('/(auth)/onboarding/theme');
   };
 
+  const styles = createStyles(theme);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Progress indicator */}
@@ -153,7 +157,7 @@ export default function AvatarScreen() {
             ) : selectedAvatar ? (
               <Text style={styles.previewEmoji}>{selectedAvatar}</Text>
             ) : (
-              <Ionicons name="person" size={60} color="#E2E8F0" />
+              <Ionicons name="person" size={60} color={theme.colors.border} />
             )}
           </View>
           <Text style={styles.previewText}>
@@ -164,7 +168,7 @@ export default function AvatarScreen() {
         {/* Upload Photo Button */}
         <Animated.View entering={FadeInDown.delay(600).springify()}>
           <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
-            <Ionicons name="camera" size={24} color="#EC4899" />
+            <Ionicons name="camera" size={24} color={theme.colors.primary} />
             <Text style={styles.uploadButtonText}>Upload Photo</Text>
           </TouchableOpacity>
         </Animated.View>
@@ -220,10 +224,10 @@ export default function AvatarScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFBF7',
+    backgroundColor: theme.colors.background,
   },
   progressContainer: {
     flexDirection: 'row',
@@ -236,13 +240,13 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#EC4899',
+    backgroundColor: theme.colors.primary,
   },
   progressDotInactive: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: theme.colors.border,
   },
   progressDotComplete: {
-    backgroundColor: '#10B981',
+    backgroundColor: theme.colors.success,
   },
   floatingHeart: {
     position: 'absolute',
@@ -266,7 +270,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 100,
+    paddingBottom: 180,
   },
   header: {
     alignItems: 'center',
@@ -280,12 +284,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#2D3748',
+    color: theme.colors.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#718096',
+    color: theme.colors.textSecondary,
     textAlign: 'center',
   },
   previewContainer: {
@@ -296,16 +300,16 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.cardBackground,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#EC4899',
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 4,
-    borderColor: '#FFE4F1',
+    borderColor: theme.colors.borderLight,
   },
   previewImage: {
     width: 112,
@@ -318,24 +322,24 @@ const styles = StyleSheet.create({
   previewText: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#2D3748',
+    color: theme.colors.text,
     marginTop: 12,
   },
   uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     borderWidth: 2,
-    borderColor: '#EC4899',
+    borderColor: theme.colors.primary,
     gap: 8,
   },
   uploadButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#EC4899',
+    color: theme.colors.primary,
   },
   divider: {
     flexDirection: 'row',
@@ -345,11 +349,11 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: theme.colors.border,
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#718096',
+    color: theme.colors.textSecondary,
     fontSize: 14,
   },
   emojiGrid: {
@@ -361,16 +365,16 @@ const styles = StyleSheet.create({
   emojiButton: {
     width: (width - 80) / 6,
     height: (width - 80) / 6,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.cardBackground,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#E2E8F0',
+    borderColor: theme.colors.border,
   },
   emojiButtonSelected: {
-    borderColor: '#EC4899',
-    backgroundColor: '#FFF0F7',
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.borderLight,
     transform: [{ scale: 1.1 }],
   },
   emojiText: {
@@ -382,9 +386,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 20,
-    backgroundColor: '#FFFBF7',
+    backgroundColor: theme.colors.background,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: theme.colors.border,
     gap: 12,
   },
   skipButton: {
@@ -392,12 +396,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   skipButtonText: {
-    color: '#718096',
+    color: theme.colors.textSecondary,
     fontSize: 16,
     fontWeight: '500',
   },
   continueButton: {
-    backgroundColor: '#EC4899',
+    backgroundColor: theme.colors.primary,
     borderRadius: 16,
     padding: 18,
     flexDirection: 'row',
@@ -415,7 +419,7 @@ const styles = StyleSheet.create({
   },
   stepText: {
     textAlign: 'center',
-    color: '#9CA3AF',
+    color: theme.colors.textLight,
     fontSize: 14,
   },
 });

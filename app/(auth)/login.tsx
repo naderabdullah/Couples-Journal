@@ -1,4 +1,4 @@
-// app/(auth)/login.tsx
+// app/(auth)/login.tsx - WITH THEME SUPPORT
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { z } from 'zod';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -26,6 +27,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
+  const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
 
   const {
@@ -58,6 +60,8 @@ export default function LoginScreen() {
     }
   };
 
+  const styles = createStyles(theme);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -80,6 +84,7 @@ export default function LoginScreen() {
                 <TextInput
                   style={[styles.input, errors.email && styles.inputError]}
                   placeholder="your@email.com"
+                  placeholderTextColor={theme.colors.textLight}
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
@@ -103,6 +108,7 @@ export default function LoginScreen() {
                 <TextInput
                   style={[styles.input, errors.password && styles.inputError]}
                   placeholder="Enter your password"
+                  placeholderTextColor={theme.colors.textLight}
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
@@ -146,10 +152,10 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFBF7',
+    backgroundColor: theme.colors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -167,12 +173,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#2D3748',
+    color: theme.colors.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#718096',
+    color: theme.colors.textSecondary,
     textAlign: 'center',
   },
   form: {
@@ -184,25 +190,26 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2D3748',
+    color: theme.colors.text,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: theme.colors.border,
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.inputBackground,
+    color: theme.colors.text,
   },
   inputError: {
-    borderColor: '#E53E3E',
+    borderColor: theme.colors.error,
   },
   errorText: {
-    color: '#E53E3E',
+    color: theme.colors.error,
     fontSize: 14,
   },
   button: {
-    backgroundColor: '#EC4899',
+    backgroundColor: theme.colors.primary,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -224,11 +231,11 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: theme.colors.border,
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#718096',
+    color: theme.colors.textSecondary,
     fontSize: 14,
   },
   secondaryButton: {
@@ -236,7 +243,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryButtonText: {
-    color: '#EC4899',
+    color: theme.colors.primary,
     fontSize: 16,
     fontWeight: '600',
   },
