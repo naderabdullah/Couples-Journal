@@ -1,6 +1,7 @@
-// app/(tabs)/calendar.tsx
+// app/(tabs)/calendar.tsx - ENHANCED with animations
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -19,25 +20,36 @@ import {
   View,
 } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Event, supabase } from '../../lib/supabase';
 
 const CATEGORIES = [
-  { value: 'anniversary', label: 'Anniversary', icon: 'heart', color: '#EC4899' },
-  { value: 'date', label: 'Date Night', icon: 'restaurant', color: '#F59E0B' },
-  { value: 'appointment', label: 'Appointment', icon: 'calendar', color: '#3B82F6' },
-  { value: 'reminder', label: 'Reminder', icon: 'alarm', color: '#8B5CF6' },
-  { value: 'milestone', label: 'Milestone', icon: 'trophy', color: '#10B981' },
-  { value: 'other', label: 'Other', icon: 'ellipsis-horizontal', color: '#6B7280' },
+  { value: 'anniversary', label: 'Anniversary', icon: 'heart', emoji: '💖', color: '#EC4899' },
+  { value: 'date', label: 'Date Night', icon: 'restaurant', emoji: '🍽️', color: '#F59E0B' },
+  { value: 'appointment', label: 'Appointment', icon: 'calendar', emoji: '📅', color: '#3B82F6' },
+  { value: 'reminder', label: 'Reminder', icon: 'alarm', emoji: '⏰', color: '#8B5CF6' },
+  { value: 'milestone', label: 'Milestone', icon: 'trophy', emoji: '🏆', color: '#10B981' },
+  { value: 'other', label: 'Other', icon: 'ellipsis-horizontal', emoji: '✨', color: '#6B7280' },
 ] as const;
 
 export default function CalendarScreen() {
   const { profile, user } = useAuth();
   const { theme } = useTheme();
   const [events, setEvents] = useState<Event[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null); // Changed to allow null
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -46,11 +58,38 @@ export default function CalendarScreen() {
   const [newEvent, setNewEvent] = useState({
     title: '',
     description: '',
-    event_date: format(new Date(), 'yyyy-MM-dd'), // Use today as default
+    event_date: format(new Date(), 'yyyy-MM-dd'),
     event_time: '',
     category: 'other' as Event['category'],
     is_all_day: true,
   });
+
+  // Animated values
+  const calendarScale = useSharedValue(0.95);
+  const addButtonScale = useSharedValue(1);
+
+  useEffect(() => {
+    // Calendar entrance animation
+    calendarScale.value = withSpring(1, { damping: 12 });
+
+    // Add button pulse
+    addButtonScale.value = withRepeat(
+      withSequence(
+        withTiming(1.1, { duration: 1000 }),
+        withTiming(1, { duration: 1000 })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const calendarStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: calendarScale.value }],
+  }));
+
+  const addButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: addButtonScale.value }],
+  }));
 
   useEffect(() => {
     if (user) {
@@ -110,7 +149,6 @@ export default function CalendarScreen() {
       }
     });
 
-    // Highlight selected date if one is selected
     if (selectedDate) {
       if (marked[selectedDate]) {
         marked[selectedDate].selected = true;
@@ -127,7 +165,6 @@ export default function CalendarScreen() {
   };
 
   const onDayPress = (day: DateData) => {
-    // Toggle selection: if clicking the same date, deselect it
     if (selectedDate === day.dateString) {
       setSelectedDate(null);
     } else {
@@ -144,7 +181,7 @@ export default function CalendarScreen() {
     setNewEvent({
       title: '',
       description: '',
-      event_date: selectedDate || format(new Date(), 'yyyy-MM-dd'), // Use selected date or today
+      event_date: selectedDate || format(new Date(), 'yyyy-MM-dd'),
       event_time: '',
       category: 'other',
       is_all_day: true,
@@ -191,13 +228,13 @@ export default function CalendarScreen() {
           .eq('id', editingEvent.id);
 
         if (error) throw error;
-        Alert.alert('Success', 'Event updated! 📅');
+        Alert.alert('Success! ✨', 'Event updated!');
       } else {
         eventData.created_by = user.id;
         const { error } = await supabase.from('events').insert(eventData);
 
         if (error) throw error;
-        Alert.alert('Success', 'Event created! 📅');
+        Alert.alert('Success! 🎉', 'Event created!');
       }
 
       setModalVisible(false);
@@ -233,7 +270,7 @@ export default function CalendarScreen() {
                 .eq('id', eventId);
 
               if (error) throw error;
-              Alert.alert('Success', 'Event deleted');
+              Alert.alert('Deleted! 🗑️');
               loadEvents();
             } catch (error) {
               console.error('Error deleting event:', error);
@@ -245,62 +282,66 @@ export default function CalendarScreen() {
     );
   };
 
-  // Modified to show all events when no date is selected
   const getEventsToDisplay = () => {
     if (selectedDate === null) {
-      return events; // Show all events
+      return events;
     }
     return events.filter((event) => event.event_date === selectedDate);
   };
 
-  const renderEventItem = ({ item }: { item: Event }) => {
+  const renderEventItem = ({ item, index }: { item: Event; index: number }) => {
     const category = CATEGORIES.find((c) => c.value === item.category);
     const isMyEvent = item.created_by === user?.id;
 
     return (
-      <TouchableOpacity
-        style={[styles.eventCard, { borderLeftColor: category?.color || '#6B7280' }]}
-        onPress={() => openEditModal(item)}
-      >
-        <View style={styles.eventHeader}>
-          <View style={styles.eventTitleRow}>
-            <View style={[styles.categoryIcon, { backgroundColor: (category?.color || '#6B7280') + '20' }]}>
-              <Ionicons
-                name={category?.icon as any || 'calendar'}
-                size={18}
-                color={category?.color || '#6B7280'}
-              />
-            </View>
-            <View style={styles.eventTextContainer}>
-              {selectedDate === null && (
-                <Text style={styles.eventDate}>
-                  {format(parseISO(item.event_date), 'MMM d, yyyy')}
-                </Text>
-              )}
-              <Text style={styles.eventTitle}>{item.title}</Text>
-              {!item.is_all_day && item.event_time && (
-                <Text style={styles.eventTime}>
-                  {format(parseISO(`2000-01-01T${item.event_time}`), 'h:mm a')}
-                </Text>
-              )}
-            </View>
-          </View>
-          <TouchableOpacity
-            onPress={() => deleteEvent(item.id)}
-            style={styles.deleteIconButton}
+      <Animated.View entering={FadeInUp.delay(index * 50).springify()}>
+        <TouchableOpacity
+          style={styles.eventCard}
+          onPress={() => openEditModal(item)}
+        >
+          <LinearGradient
+            colors={[category?.color + '15' || '#6B728015', category?.color + '05' || '#6B728005']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.eventGradient}
           >
-            <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
-          </TouchableOpacity>
-        </View>
-        {item.description && (
-          <Text style={styles.eventDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
-        {!isMyEvent && profile?.couple_id && (
-          <Text style={styles.partnerBadge}>Created by partner</Text>
-        )}
-      </TouchableOpacity>
+            <View style={styles.eventHeader}>
+              <View style={styles.eventTitleRow}>
+                <View style={[styles.categoryIconContainer, { backgroundColor: category?.color + '25' || '#6B728025' }]}>
+                  <Text style={styles.categoryEmoji}>{category?.emoji || '✨'}</Text>
+                </View>
+                <View style={styles.eventTextContainer}>
+                  {selectedDate === null && (
+                    <Text style={styles.eventDate}>
+                      {format(parseISO(item.event_date), 'MMM d, yyyy')}
+                    </Text>
+                  )}
+                  <Text style={styles.eventTitle}>{item.title}</Text>
+                  {!item.is_all_day && item.event_time && (
+                    <Text style={styles.eventTime}>
+                      ⏰ {format(parseISO(`2000-01-01T${item.event_time}`), 'h:mm a')}
+                    </Text>
+                  )}
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => deleteEvent(item.id)}
+                style={styles.deleteIconButton}
+              >
+                <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+              </TouchableOpacity>
+            </View>
+            {item.description && (
+              <Text style={styles.eventDescription} numberOfLines={2}>
+                {item.description}
+              </Text>
+            )}
+            {!isMyEvent && profile?.couple_id && (
+              <Text style={styles.partnerBadge}>💑 Created by partner</Text>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
     );
   };
 
@@ -320,52 +361,68 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.header}>
         <TouchableOpacity onPress={() => router.push('/(tabs)')} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Calendar</Text>
-        <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-          <Ionicons name="add-circle" size={32} color={theme.colors.primary} />
-        </TouchableOpacity>
-      </View>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Calendar 📅</Text>
+        </View>
+        <Animated.View style={addButtonStyle}>
+          <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
+            <LinearGradient
+              colors={[theme.colors.primary, theme.colors.secondary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.addButtonGradient}
+            >
+              <Ionicons name="add" size={28} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Calendar
-          current={selectedDate || format(new Date(), 'yyyy-MM-dd')}
-          onDayPress={onDayPress}
-          markingType="multi-dot"
-          markedDates={markedDates}
-          theme={{
-            backgroundColor: theme.colors.cardBackground,
-            calendarBackground: theme.colors.cardBackground,
-            textSectionTitleColor: theme.colors.textSecondary,
-            selectedDayBackgroundColor: theme.colors.primary,
-            selectedDayTextColor: '#FFFFFF',
-            todayTextColor: theme.colors.primary,
-            dayTextColor: theme.colors.text,
-            textDisabledColor: theme.colors.textLight,
-            dotColor: theme.colors.primary,
-            selectedDotColor: '#FFFFFF',
-            arrowColor: theme.colors.primary,
-            monthTextColor: theme.colors.text,
-            textDayFontWeight: '400',
-            textMonthFontWeight: 'bold',
-            textDayHeaderFontWeight: '500',
-            textDayFontSize: 16,
-            textMonthFontSize: 18,
-            textDayHeaderFontSize: 14,
-          }}
-          style={styles.calendar}
-        />
+        <Animated.View style={calendarStyle}>
+          <Calendar
+            current={selectedDate || format(new Date(), 'yyyy-MM-dd')}
+            onDayPress={onDayPress}
+            markingType="multi-dot"
+            markedDates={markedDates}
+            theme={{
+              backgroundColor: theme.colors.cardBackground,
+              calendarBackground: theme.colors.cardBackground,
+              textSectionTitleColor: theme.colors.textSecondary,
+              selectedDayBackgroundColor: theme.colors.primary,
+              selectedDayTextColor: '#FFFFFF',
+              todayTextColor: theme.colors.primary,
+              dayTextColor: theme.colors.text,
+              textDisabledColor: theme.colors.textLight,
+              dotColor: theme.colors.primary,
+              selectedDotColor: '#FFFFFF',
+              arrowColor: theme.colors.primary,
+              monthTextColor: theme.colors.text,
+              textDayFontWeight: '400',
+              textMonthFontWeight: 'bold',
+              textDayHeaderFontWeight: '500',
+              textDayFontSize: 16,
+              textMonthFontSize: 18,
+              textDayHeaderFontSize: 14,
+            }}
+            style={styles.calendar}
+          />
+        </Animated.View>
 
         <View style={styles.eventsSection}>
-          <View style={styles.eventsSectionHeader}>
+          <Animated.View 
+            entering={FadeInUp.delay(200).springify()} 
+            style={styles.eventsSectionHeader}
+          >
             <View style={styles.sectionTitleContainer}>
               <Text style={styles.sectionTitle}>
                 {selectedDate === null 
-                  ? 'All Events' 
-                  : format(parseISO(selectedDate), 'MMMM d, yyyy')}
+                  ? '✨ All Events' 
+                  : `📌 ${format(parseISO(selectedDate), 'MMMM d, yyyy')}`}
               </Text>
               {selectedDate !== null && (
                 <TouchableOpacity onPress={clearSelection} style={styles.clearButton}>
@@ -377,18 +434,18 @@ export default function CalendarScreen() {
             <Text style={styles.eventCount}>
               {displayedEvents.length} {displayedEvents.length === 1 ? 'event' : 'events'}
             </Text>
-          </View>
+          </Animated.View>
 
           {loading ? (
             <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 20 }} />
           ) : displayedEvents.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="calendar-outline" size={48} color={theme.colors.border} />
+            <Animated.View entering={FadeIn.delay(300).springify()} style={styles.emptyState}>
+              <Text style={styles.emptyEmoji}>📅</Text>
               <Text style={styles.emptyTitle}>
                 {selectedDate === null ? 'No events yet' : 'No events on this day'}
               </Text>
-              <Text style={styles.emptyText}>Tap + to add an event</Text>
-            </View>
+              <Text style={styles.emptyText}>Tap the + button to add an event</Text>
+            </Animated.View>
           ) : (
             <FlatList
               data={displayedEvents}
@@ -401,7 +458,7 @@ export default function CalendarScreen() {
         </View>
       </ScrollView>
 
-      {/* Add/Edit Event Modal */}
+      {/* Modal - Keep existing modal code but enhance the category selector */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -417,7 +474,7 @@ export default function CalendarScreen() {
                 <Text style={styles.cancelButton}>Cancel</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitle}>
-                {editingEvent ? 'Edit Event' : 'New Event'}
+                {editingEvent ? '✏️ Edit Event' : '✨ New Event'}
               </Text>
               <TouchableOpacity onPress={saveEvent}>
                 <Text style={styles.saveButton}>Save</Text>
@@ -452,11 +509,7 @@ export default function CalendarScreen() {
                         ]}
                         onPress={() => setNewEvent({ ...newEvent, category: cat.value })}
                       >
-                        <Ionicons
-                          name={cat.icon as any}
-                          size={20}
-                          color={cat.color}
-                        />
+                        <Text style={styles.categoryButtonEmoji}>{cat.emoji}</Text>
                         <Text
                           style={[
                             styles.categoryButtonText,
@@ -474,7 +527,7 @@ export default function CalendarScreen() {
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Date</Text>
                 <Text style={styles.dateDisplay}>
-                  {format(parseISO(newEvent.event_date), 'EEEE, MMMM d, yyyy')}
+                  📅 {format(parseISO(newEvent.event_date), 'EEEE, MMMM d, yyyy')}
                 </Text>
               </View>
 
@@ -490,7 +543,7 @@ export default function CalendarScreen() {
 
               {!newEvent.is_all_day && (
                 <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Time</Text>
+                  <Text style={styles.label}>Time ⏰</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="HH:MM (24-hour format)"
@@ -543,19 +596,33 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: theme.colors.primary,
-    flex: 1,
-    textAlign: 'center',
   },
   addButton: {
-    padding: 0,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  addButtonGradient: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   backButton: {
     padding: 4,
-    width: 32,
+    width: 40,
   },
   calendar: {
     borderBottomWidth: 1,
@@ -565,20 +632,17 @@ const createStyles = (theme: any) => StyleSheet.create({
     padding: 20,
   },
   eventsSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 16,
   },
   sectionTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flex: 1,
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: 'bold',
     color: theme.colors.text,
   },
   clearButton: {
@@ -602,15 +666,19 @@ const createStyles = (theme: any) => StyleSheet.create({
     gap: 12,
   },
   eventCard: {
-    backgroundColor: theme.colors.cardBackground,
-    borderRadius: 12,
-    padding: 16,
-    borderLeftWidth: 4,
+    borderRadius: 16,
+    overflow: 'hidden',
     shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 2,
+  },
+  eventGradient: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 16,
   },
   eventHeader: {
     flexDirection: 'row',
@@ -622,13 +690,16 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'flex-start',
     flex: 1,
   },
-  categoryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  categoryIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  categoryEmoji: {
+    fontSize: 24,
   },
   eventTextContainer: {
     flex: 1,
@@ -640,8 +711,8 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontWeight: '500',
   },
   eventTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: 'bold',
     color: theme.colors.text,
     marginBottom: 4,
   },
@@ -653,15 +724,15 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textSecondary,
     marginTop: 8,
-    marginLeft: 48,
+    marginLeft: 56,
     lineHeight: 20,
   },
   partnerBadge: {
     fontSize: 12,
     color: theme.colors.primary,
     marginTop: 8,
-    marginLeft: 48,
-    fontStyle: 'italic',
+    marginLeft: 56,
+    fontWeight: '500',
   },
   deleteIconButton: {
     padding: 4,
@@ -670,16 +741,19 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 40,
   },
+  emptyEmoji: {
+    fontSize: 64,
+    marginBottom: 12,
+  },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: 'bold',
     color: theme.colors.textSecondary,
-    marginTop: 12,
+    marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
     color: theme.colors.textLight,
-    marginTop: 4,
   },
   modalContainer: {
     flex: 1,
@@ -695,8 +769,8 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderBottomColor: theme.colors.border,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: 'bold',
     color: theme.colors.text,
   },
   cancelButton: {
@@ -774,6 +848,9 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.colors.inputBackground,
     borderWidth: 2,
     borderColor: theme.colors.border,
+  },
+  categoryButtonEmoji: {
+    fontSize: 20,
   },
   categoryButtonText: {
     fontSize: 14,

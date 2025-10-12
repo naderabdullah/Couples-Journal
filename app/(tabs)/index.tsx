@@ -1,5 +1,6 @@
-// app/(tabs)/index.tsx
+// app/(tabs)/index.tsx - ENHANCED with animations
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -10,6 +11,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, {
+  FadeInDown,
+  FadeInLeft,
+  FadeInRight,
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -20,6 +33,7 @@ interface NavTile {
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
+  emoji: string;
   colorKey: 'nav1' | 'nav2' | 'nav3' | 'nav4';
   route: string;
 }
@@ -36,11 +50,48 @@ export default function HomeScreen() {
     memoriesCount: 0,
   });
 
+  // Animated values
+  const waveScale = useSharedValue(1);
+  const heartBeat = useSharedValue(1);
+
+  useEffect(() => {
+    // Wave animation for greeting emoji
+    waveScale.value = withRepeat(
+      withSequence(
+        withTiming(1.1, { duration: 800 }),
+        withTiming(1, { duration: 800 })
+      ),
+      -1,
+      true
+    );
+
+    // Heartbeat for stats if coupled
+    if (profile?.couple_id) {
+      heartBeat.value = withRepeat(
+        withSequence(
+          withSpring(1.2),
+          withSpring(1)
+        ),
+        -1,
+        true
+      );
+    }
+  }, [profile?.couple_id]);
+
+  const waveStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: waveScale.value }],
+  }));
+
+  const heartStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartBeat.value }],
+  }));
+
   const navTiles: NavTile[] = [
     {
       id: 'calendar',
       title: 'Calendar',
       subtitle: 'Plan events & dates',
+      emoji: '📅',
       icon: 'calendar',
       colorKey: 'nav1',
       route: '/(tabs)/calendar',
@@ -48,7 +99,8 @@ export default function HomeScreen() {
     {
       id: 'connect',
       title: 'Connect',
-      subtitle: 'Share gratitude & answer questions',
+      subtitle: 'Daily questions & gratitude',
+      emoji: '💕',
       icon: 'heart',
       colorKey: 'nav2',
       route: '/(tabs)/connect',
@@ -57,6 +109,7 @@ export default function HomeScreen() {
       id: 'memories',
       title: 'Memories',
       subtitle: 'Capture special moments',
+      emoji: '📸',
       icon: 'images',
       colorKey: 'nav3',
       route: '/(tabs)/memories',
@@ -65,6 +118,7 @@ export default function HomeScreen() {
       id: 'profile',
       title: 'Profile',
       subtitle: 'Settings & preferences',
+      emoji: '⚙️',
       icon: 'person-circle',
       colorKey: 'nav4',
       route: '/(tabs)/profile',
@@ -90,7 +144,6 @@ export default function HomeScreen() {
         return;
       }
 
-      // Get couple stats
       if (profile.couple_id) {
         const { data: coupleData } = await supabase
           .from('couples')
@@ -105,13 +158,11 @@ export default function HomeScreen() {
           setStats(prev => ({ ...prev, daysTogether: daysTogether }));
         }
 
-        // Get entries count
         const { count: entriesCount } = await supabase
           .from('journal_entries')
           .select('*', { count: 'exact', head: true })
           .eq('couple_id', profile.couple_id);
 
-        // Get memories count
         const { count: memoriesCount } = await supabase
           .from('memories')
           .select('*', { count: 'exact', head: true })
@@ -162,56 +213,102 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
+        {/* Header with greeting */}
+        <Animated.View 
+          entering={FadeInDown.delay(100).springify()} 
+          style={styles.header}
+        >
           <View>
             <Text style={styles.greeting}>{greeting}!</Text>
-            <Text style={styles.userName}>{profile?.display_name || 'Welcome'}</Text>
+            <View style={styles.nameContainer}>
+              <Text style={styles.userName}>{profile?.display_name || 'Welcome'}</Text>
+              <Animated.Text style={[styles.waveEmoji, waveStyle]}>👋</Animated.Text>
+            </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Stats Cards */}
         {profile?.couple_id && (
-          <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <Ionicons name="calendar" size={24} color={theme.colors.primary} />
+          <Animated.View 
+            entering={FadeInUp.delay(200).springify()} 
+            style={styles.statsContainer}
+          >
+            <LinearGradient
+              colors={[theme.colors.primary + '15', theme.colors.primary + '05']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.statCard}
+            >
+              <Animated.View style={heartStyle}>
+                <Text style={styles.statEmoji}>💖</Text>
+              </Animated.View>
               <Text style={styles.statNumber}>{stats.daysTogether}</Text>
               <Text style={styles.statLabel}>Days Together</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Ionicons name="book" size={24} color={theme.colors.secondary} />
+            </LinearGradient>
+
+            <LinearGradient
+              colors={[theme.colors.secondary + '15', theme.colors.secondary + '05']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.statCard}
+            >
+              <Text style={styles.statEmoji}>📖</Text>
               <Text style={styles.statNumber}>{stats.entriesCount}</Text>
               <Text style={styles.statLabel}>Entries</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Ionicons name="images" size={24} color={theme.colors.accent} />
+            </LinearGradient>
+
+            <LinearGradient
+              colors={[theme.colors.accent + '15', theme.colors.accent + '05']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.statCard}
+            >
+              <Text style={styles.statEmoji}>✨</Text>
               <Text style={styles.statNumber}>{stats.memoriesCount}</Text>
               <Text style={styles.statLabel}>Memories</Text>
-            </View>
-          </View>
+            </LinearGradient>
+          </Animated.View>
         )}
 
         {/* Navigation Tiles */}
         <View style={styles.tilesContainer}>
-          <Text style={styles.sectionTitle}>What would you like to do?</Text>
-          {navTiles.map((tile) => {
+          <Animated.Text 
+            entering={FadeInLeft.delay(300).springify()} 
+            style={styles.sectionTitle}
+          >
+            What would you like to do? ✨
+          </Animated.Text>
+          {navTiles.map((tile, index) => {
             const tileColor = theme.colors[tile.colorKey];
             return (
-              <TouchableOpacity
+              <Animated.View
                 key={tile.id}
-                style={[styles.tile, { borderLeftColor: tileColor }]}
-                onPress={() => handleTilePress(tile.route)}
-                activeOpacity={0.7}
+                entering={FadeInRight.delay(350 + index * 50).springify()}
               >
-                <View style={[styles.iconContainer, { backgroundColor: tileColor + '15' }]}>
-                  <Ionicons name={tile.icon} size={32} color={tileColor} />
-                </View>
-                <View style={styles.tileContent}>
-                  <Text style={styles.tileTitle}>{tile.title}</Text>
-                  <Text style={styles.tileSubtitle}>{tile.subtitle}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color={theme.colors.textLight} />
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.tile}
+                  onPress={() => handleTilePress(tile.route)}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={[tileColor + '15', tileColor + '08']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.tileGradient}
+                  >
+                    <View style={[styles.iconContainer, { backgroundColor: tileColor + '25' }]}>
+                      <Text style={styles.tileEmoji}>{tile.emoji}</Text>
+                    </View>
+                    <View style={styles.tileContent}>
+                      <Text style={styles.tileTitle}>{tile.title}</Text>
+                      <Text style={styles.tileSubtitle}>{tile.subtitle}</Text>
+                    </View>
+                    <View style={[styles.chevronContainer, { backgroundColor: tileColor + '20' }]}>
+                      <Ionicons name="chevron-forward" size={20} color={tileColor} />
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </Animated.View>
             );
           })}
         </View>
@@ -246,10 +343,18 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.colors.textLight,
     marginBottom: 4,
   },
+  nameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   userName: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: theme.colors.primary,
+  },
+  waveEmoji: {
+    fontSize: 32,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -259,74 +364,92 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: theme.colors.cardBackground,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 16,
     alignItems: 'center',
     shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 4,
     marginHorizontal: 6,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
+  statEmoji: {
+    fontSize: 32,
+    marginBottom: 4,
+  },
   statNumber: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: theme.colors.text,
-    marginTop: 8,
+    marginTop: 4,
   },
   statLabel: {
     fontSize: 12,
     color: theme.colors.textLight,
     marginTop: 4,
     textAlign: 'center',
+    fontWeight: '500',
   },
   tilesContainer: {
     paddingHorizontal: 20,
     paddingTop: 8,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: 'bold',
     color: theme.colors.text,
     marginBottom: 16,
   },
   tile: {
+    marginBottom: 12,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  tileGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.cardBackground,
-    borderRadius: 16,
     padding: 20,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+  },
+  tileEmoji: {
+    fontSize: 28,
   },
   tileContent: {
     flex: 1,
   },
   tileTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: 'bold',
     color: theme.colors.text,
     marginBottom: 4,
   },
   tileSubtitle: {
     fontSize: 14,
     color: theme.colors.textSecondary,
+  },
+  chevronContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

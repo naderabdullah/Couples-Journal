@@ -1,4 +1,4 @@
-// app/(tabs)/profile.tsx - FIXED X BUTTON POSITIONING
+// app/(tabs)/profile.tsx - ENHANCED with animations and avatar display
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   Clipboard,
+  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -14,6 +15,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemeSwitcher } from '../../components/ThemeSwitcher';
 import { useAuth } from '../../contexts/AuthContext';
@@ -25,7 +36,6 @@ export default function ProfileScreen() {
   const { theme } = useTheme();
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   
-  // Code-based invite system state
   const [inviteMode, setInviteMode] = useState<'choose' | 'generate' | 'accept'>('choose');
   const [inviteCode, setInviteCode] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
@@ -33,7 +43,35 @@ export default function ProfileScreen() {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [loadingCode, setLoadingCode] = useState(false);
 
-  // Countdown timer for code expiry
+  // Animated values for floating hearts
+  const heartScale = useSharedValue(1);
+  const avatarScale = useSharedValue(1);
+
+  useEffect(() => {
+    // Pulse animation for connected heart
+    if (profile?.couple_id) {
+      heartScale.value = withRepeat(
+        withSequence(
+          withSpring(1.2),
+          withSpring(1)
+        ),
+        -1,
+        true
+      );
+    }
+
+    // Avatar entrance animation
+    avatarScale.value = withSpring(1, { damping: 8 });
+  }, [profile?.couple_id]);
+
+  const heartStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartScale.value }],
+  }));
+
+  const avatarStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: avatarScale.value }],
+  }));
+
   useEffect(() => {
     if (!codeExpiry) return;
 
@@ -155,12 +193,28 @@ export default function ProfileScreen() {
     Alert.alert('Copied!', 'Code copied to clipboard');
   };
 
+  const renderAvatar = () => {
+    const avatarUrl = profile?.avatar_url;
+    
+    // Check if it's an emoji (single character, likely emoji)
+    const isEmoji = avatarUrl && avatarUrl.length <= 4;
+    
+    if (isEmoji) {
+      return <Text style={styles.avatarEmoji}>{avatarUrl}</Text>;
+    } else if (avatarUrl && avatarUrl.startsWith('http')) {
+      return <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />;
+    } else {
+      return <Ionicons name="person-circle" size={100} color={theme.colors.primary} />;
+    }
+  };
+
   const styles = createStyles(theme);
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
+        {/* Header with back button */}
+        <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.header}>
           <TouchableOpacity 
             onPress={() => router.push('/(tabs)')}
             style={styles.backButton}
@@ -173,31 +227,52 @@ export default function ProfileScreen() {
           </View>
           
           <View style={styles.headerRight} />
-        </View>
+        </Animated.View>
 
-        {/* Profile Info */}
-        <View style={styles.profileSection}>
-          <View style={styles.avatar}>
-            <Ionicons name="person-circle" size={80} color={theme.colors.primary} />
-          </View>
-          <Text style={styles.userName}>{profile?.display_name}</Text>
-          <Text style={styles.userEmail}>{profile?.email}</Text>
-        </View>
+        {/* Profile Info with Avatar */}
+        <Animated.View 
+          entering={FadeIn.delay(200).springify()} 
+          style={styles.profileSection}
+        >
+          <Animated.View style={[styles.avatarContainer, avatarStyle]}>
+            {renderAvatar()}
+          </Animated.View>
+          <Animated.Text 
+            entering={FadeInUp.delay(300).springify()} 
+            style={styles.userName}
+          >
+            {profile?.display_name}
+          </Animated.Text>
+          <Animated.Text 
+            entering={FadeInUp.delay(350).springify()} 
+            style={styles.userEmail}
+          >
+            {profile?.email}
+          </Animated.Text>
+        </Animated.View>
 
         {/* Theme Selector */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Appearance</Text>
+        <Animated.View 
+          entering={FadeInUp.delay(400).springify()} 
+          style={styles.section}
+        >
+          <Text style={styles.sectionTitle}>✨ Appearance</Text>
           <ThemeSwitcher />
-        </View>
+        </Animated.View>
 
         {/* Couple Status */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Relationship Status</Text>
+        <Animated.View 
+          entering={FadeInUp.delay(450).springify()} 
+          style={styles.section}
+        >
+          <Text style={styles.sectionTitle}>💕 Relationship Status</Text>
           {profile?.couple_id ? (
-            <View style={styles.connectedCard}>
-              <Ionicons name="heart" size={24} color={theme.colors.primary} />
-              <Text style={styles.connectedText}>Connected</Text>
-            </View>
+            <Animated.View style={heartStyle}>
+              <View style={styles.connectedCard}>
+                <Text style={styles.connectedEmoji}>💖</Text>
+                <Text style={styles.connectedText}>Connected with your partner!</Text>
+              </View>
+            </Animated.View>
           ) : (
             <>
               <Text style={styles.notConnectedText}>
@@ -212,15 +287,20 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </>
           )}
-        </View>
+        </Animated.View>
 
         {/* Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Settings</Text>
+        <Animated.View 
+          entering={FadeInUp.delay(500).springify()} 
+          style={styles.section}
+        >
+          <Text style={styles.sectionTitle}>⚙️ Settings</Text>
           
           <TouchableOpacity style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Ionicons name="notifications-outline" size={24} color={theme.colors.primary} />
+              <View style={[styles.settingIconContainer, { backgroundColor: theme.colors.primary + '20' }]}>
+                <Ionicons name="notifications-outline" size={24} color={theme.colors.primary} />
+              </View>
               <Text style={styles.settingText}>Notifications</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textLight} />
@@ -228,7 +308,9 @@ export default function ProfileScreen() {
 
           <TouchableOpacity style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Ionicons name="lock-closed-outline" size={24} color={theme.colors.secondary} />
+              <View style={[styles.settingIconContainer, { backgroundColor: theme.colors.secondary + '20' }]}>
+                <Ionicons name="lock-closed-outline" size={24} color={theme.colors.secondary} />
+              </View>
               <Text style={styles.settingText}>Privacy</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textLight} />
@@ -236,7 +318,9 @@ export default function ProfileScreen() {
 
           <TouchableOpacity style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Ionicons name="help-circle-outline" size={24} color={theme.colors.accent} />
+              <View style={[styles.settingIconContainer, { backgroundColor: theme.colors.accent + '20' }]}>
+                <Ionicons name="help-circle-outline" size={24} color={theme.colors.accent} />
+              </View>
               <Text style={styles.settingText}>Help & Support</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textLight} />
@@ -244,21 +328,25 @@ export default function ProfileScreen() {
 
           <TouchableOpacity style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Ionicons name="information-circle-outline" size={24} color={theme.colors.nav2} />
+              <View style={[styles.settingIconContainer, { backgroundColor: theme.colors.nav2 + '20' }]}>
+                <Ionicons name="information-circle-outline" size={24} color={theme.colors.nav2} />
+              </View>
               <Text style={styles.settingText}>About</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textLight} />
           </TouchableOpacity>
-        </View>
+        </Animated.View>
 
         {/* Sign Out */}
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <Ionicons name="log-out-outline" size={20} color={theme.colors.error} />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
+        <Animated.View entering={FadeInUp.delay(550).springify()}>
+          <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+            <Ionicons name="log-out-outline" size={20} color={theme.colors.error} />
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
+        </Animated.View>
       </ScrollView>
 
-      {/* Invite Partner Modal */}
+      {/* Invite Partner Modal - Keep existing modal code */}
       <Modal
         animationType="slide"
         transparent={false}
@@ -267,20 +355,21 @@ export default function ProfileScreen() {
       >
         <SafeAreaView style={styles.modalFullScreen} edges={['top', 'bottom']}>
           <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>
-                  {inviteMode === 'choose' ? 'Connect with Partner' : 
-                   inviteMode === 'generate' ? 'Share Your Code' : 'Enter Code'}
-                </Text>
-                <TouchableOpacity onPress={closeInviteModal}>
-                  <Ionicons name="close" size={24} color={theme.colors.text} />
-                </TouchableOpacity>
-              </View>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {inviteMode === 'choose' ? 'Connect with Partner' : 
+                 inviteMode === 'generate' ? 'Share Your Code' : 'Enter Code'}
+              </Text>
+              <TouchableOpacity onPress={closeInviteModal}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
 
-              <ScrollView 
-                showsVerticalScrollIndicator={false} 
-                contentContainerStyle={styles.modalScrollContent}
-              >
+            <ScrollView 
+              showsVerticalScrollIndicator={false} 
+              contentContainerStyle={styles.modalScrollContent}
+            >
+              {/* Keep existing modal content */}
               {inviteMode === 'choose' && (
                 <View style={styles.inviteChooseContainer}>
                   <Text style={styles.modalDescription}>
@@ -496,7 +585,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: theme.colors.primary,
   },
@@ -505,20 +594,41 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   profileSection: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 30,
     backgroundColor: theme.colors.cardBackground,
   },
-  avatar: {
-    marginBottom: 12,
+  avatarContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: theme.colors.borderLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 4,
+    borderColor: theme.colors.border,
+  },
+  avatarEmoji: {
+    fontSize: 60,
+  },
+  avatarImage: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
   },
   userName: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: 'bold',
     color: theme.colors.text,
     marginBottom: 4,
   },
   userEmail: {
-    fontSize: 14,
+    fontSize: 16,
     color: theme.colors.textSecondary,
   },
   section: {
@@ -530,23 +640,29 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginTop: 8,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: 'bold',
     color: theme.colors.text,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   connectedCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.borderLight,
-    padding: 16,
-    borderRadius: 12,
-    gap: 8,
+    padding: 20,
+    borderRadius: 16,
+    gap: 12,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  connectedEmoji: {
+    fontSize: 32,
   },
   connectedText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '600',
     color: theme.colors.primary,
+    flex: 1,
   },
   notConnectedText: {
     fontSize: 14,
@@ -558,9 +674,14 @@ const createStyles = (theme: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 16,
     gap: 8,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   inviteButtonText: {
     color: '#fff',
@@ -580,9 +701,17 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  settingIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   settingText: {
     fontSize: 16,
     color: theme.colors.text,
+    fontWeight: '500',
   },
   signOutButton: {
     flexDirection: 'row',
@@ -590,9 +719,9 @@ const createStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'center',
     marginHorizontal: 20,
     marginVertical: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 2,
     borderColor: theme.colors.error,
     gap: 8,
     backgroundColor: theme.colors.cardBackground,
@@ -602,6 +731,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  // Modal styles (keep existing)
   modalFullScreen: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -609,7 +739,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   modalContent: {
     flex: 1,
     backgroundColor: theme.colors.cardBackground,
-    paddingTop: 8,  // ✅ REDUCED from 20 - X button more accessible
+    paddingTop: 8,
     paddingHorizontal: 20,
   },
   modalHeader: {
@@ -617,7 +747,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
-    paddingTop: 4,  // ✅ REDUCED from 10 - Better tap area
+    paddingTop: 4,
   },
   modalTitle: {
     fontSize: 18,
