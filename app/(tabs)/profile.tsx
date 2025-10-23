@@ -25,7 +25,7 @@ import Animated, {
   withSequence,
   withSpring
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeSwitcher } from '../../components/ThemeSwitcher';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -34,6 +34,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { profile, signOut, generateInviteCode, acceptInviteCode, getCurrentInviteCode } = useAuth();
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   
   const [inviteMode, setInviteMode] = useState<'choose' | 'generate' | 'accept'>('choose');
@@ -353,7 +354,7 @@ export default function ProfileScreen() {
         visible={inviteModalVisible}
         onRequestClose={closeInviteModal}
       >
-        <SafeAreaView style={styles.modalFullScreen} edges={['top', 'bottom']}>
+        <View style={[styles.modalFullScreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
@@ -553,7 +554,7 @@ export default function ProfileScreen() {
               )}
             </ScrollView>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -739,7 +740,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   modalContent: {
     flex: 1,
     backgroundColor: theme.colors.cardBackground,
-    paddingTop: 8,
+    paddingTop: 20,
     paddingHorizontal: 20,
   },
   modalHeader: {
@@ -747,7 +748,8 @@ const createStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
-    paddingTop: 4,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   modalTitle: {
     fontSize: 18,

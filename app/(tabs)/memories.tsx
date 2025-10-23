@@ -34,7 +34,7 @@ import Animated, {
   withSequence,
   withTiming
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Memory, MemoryItem, supabase } from '../../lib/supabase';
@@ -52,6 +52,7 @@ type ItemType = 'photo' | 'journal' | 'audio';
 export default function MemoriesScreen() {
   const { profile, user } = useAuth();
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [memories, setMemories] = useState<MemoryWithItems[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -766,7 +767,7 @@ export default function MemoriesScreen() {
           style={styles.modalContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <SafeAreaView style={{ flex: 1 }}>
+          <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
             <View style={styles.modalHeader}>
               <TouchableOpacity
                 onPress={() => setCreateModalVisible(false)}
@@ -804,7 +805,7 @@ export default function MemoriesScreen() {
                 💡 Create a memory collection to organize photos, journal entries, and audio recordings around a theme or event.
               </Text>
             </ScrollView>
-          </SafeAreaView>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -818,7 +819,7 @@ export default function MemoriesScreen() {
           setShowImageViewer(false);
         }}
       >
-        <SafeAreaView style={styles.modalContainer} edges={['top']}>
+        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
           <View style={styles.detailModalHeader}>
             <TouchableOpacity
               onPress={() => {
@@ -1125,7 +1126,7 @@ export default function MemoriesScreen() {
               )}
             </KeyboardAvoidingView>
           )}
-        </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
